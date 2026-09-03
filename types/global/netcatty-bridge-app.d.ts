@@ -76,6 +76,35 @@ declare global {
         updatedAt: number;
       }>;
     }>;
+    orgCenterShareStart?(payload: {
+      sessionId: string;
+      url: string;
+      apiKey: string;
+      label?: string;
+      cols?: number;
+      rows?: number;
+    }): Promise<{ ok: boolean; pin: string; roomId: string }>;
+    orgCenterShareStop?(sessionId: string): Promise<{ stopped: boolean }>;
+    orgCenterShareJoin?(payload: {
+      sessionId: string;
+      url: string;
+      apiKey: string;
+      pin: string;
+    }): Promise<{ ok: boolean; roomId: string; label?: string; cols?: number; rows?: number }>;
+    orgCenterShareLeave?(sessionId: string): Promise<{ left: boolean }>;
+    orgCenterShareGuestInput?(sessionId: string, data: string): void;
+    orgCenterShareHostResize?(sessionId: string, cols: number, rows: number): void;
+    onOrgCenterShareEvent?(callback: (payload: {
+      type: string;
+      sessionId?: string;
+      pin?: string;
+      roomId?: string;
+      label?: string;
+      cols?: number;
+      rows?: number;
+      reason?: string;
+      message?: string;
+    }) => void): () => void;
 
     // SSH diagnostic logs
     getSshDebugLogInfo?(): Promise<{

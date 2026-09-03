@@ -228,6 +228,7 @@ const WorkspaceFocusSessionRow = memo<WorkspaceFocusSessionRowProps>(({
         sessionStatus={session.status}
         reconnectActive={reconnectActive}
         onRenameSession={onStartRename}
+        isOrgShareGuest={session.orgShareRole === 'guest'}
         t={t}
       />
     </ContextMenu>

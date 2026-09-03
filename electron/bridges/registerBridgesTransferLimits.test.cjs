@@ -102,6 +102,7 @@ function createBridgeRegistrarForTest({
     getCredentialBridge: () => noopBridge,
     getAutoUpdateBridge: () => noopBridge,
     getOrgCenterBridge: () => noopBridge,
+    getOrgCenterShareBridge: () => noopBridge,
     getAiBridge: () => noopBridge,
     getHttpNetworkProxyBridge: () => noopBridge,
     getWindowManager: () => ({}),

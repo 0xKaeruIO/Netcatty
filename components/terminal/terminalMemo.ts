@@ -36,6 +36,7 @@ export const terminalPropsAreEqual = (
   // accentMode / customAccent intentionally omitted — Terminal reads appearanceChromeStore.
   && prev.terminalSettings === next.terminalSettings
   && prev.sessionId === next.sessionId
+  && prev.orgShareRole === next.orgShareRole
   && prev.restoreState === next.restoreState
   && prev.vaultInitializedOverride === next.vaultInitializedOverride
   && prev.shellType === next.shellType

@@ -79,6 +79,16 @@ import {
 } from '../../infrastructure/config/storageKeys';
 import { getEffectiveKnownHosts } from '../../infrastructure/syncHelpers';
 import { toast } from '../../components/ui/toast';
+import { formatOrgCenterError } from '../i18n/formatOrgCenterError';
+import { formatOrgShareGuestLabel } from '../../domain/orgCenterShare';
+import { readOrgCenterConnections } from '../state/useOrgCenterConnections';
+import {
+  clearGuestShare,
+  clearHostShare,
+  getOrgCenterShareSnapshot,
+  markGuestShare,
+  patchGuestShare,
+} from '../state/orgCenterShareStore';
 import { VaultSection } from '../../components/VaultView';
 import { KeyboardInteractiveRequest } from '../../components/KeyboardInteractiveModal';
 import { PassphraseRequest } from '../../components/PassphraseModal';
@@ -235,6 +245,7 @@ export function AppSideEffects() {
     createLocalTerminal,
     createSerialSession,
     connectToHost,
+    addOrgShareGuestSession,
     closeSession,
     closeSessions,
     closeWorkspace,
@@ -254,6 +265,7 @@ export function AppSideEffects() {
     copyWorkspace,
     createSessionFromCloneSource,
     getSessionRestoreCwd,
+    renameSessionInline,
   } = sessionState;
 
   // Presentation-field thrash stays off Host bags (Hosts use retainStable);
@@ -1245,6 +1257,101 @@ export function AppSideEffects() {
     );
   }, [addConnectionLog, createLocalTerminal, terminalSettings, discoveredShells]);
 
+  const handleJoinOrgCenterShare = useCallback(async (centerId: string, pin: string) => {
+    const connection = readOrgCenterConnections().find((item) => item.id === centerId);
+    if (!connection) {
+      toast.error(t("vault.hosts.orgCenterEmpty"));
+      throw new Error(t("vault.hosts.orgCenterEmpty"));
+    }
+    const sessionId = addOrgShareGuestSession({
+      pin,
+      centerId,
+      label: formatOrgShareGuestLabel(pin),
+    });
+    markGuestShare(sessionId, {
+      centerId,
+      pin,
+      label: formatOrgShareGuestLabel(pin),
+      status: "joining",
+    });
+    try {
+      const result = await netcattyBridge.get()?.orgCenterShareJoin?.({
+        sessionId,
+        url: connection.url,
+        apiKey: connection.apiKey,
+        pin,
+      });
+      if (!result?.ok) {
+        throw new Error(t("settings.orgCenter.error.generic"));
+      }
+      const label = formatOrgShareGuestLabel(pin, result.label);
+      markGuestShare(sessionId, {
+        centerId,
+        pin,
+        label,
+        cols: result.cols,
+        rows: result.rows,
+        status: "active",
+      });
+      renameSessionInline(sessionId, label);
+    } catch (err) {
+      try {
+        await netcattyBridge.get()?.orgCenterShareLeave?.(sessionId);
+      } catch {
+        // ignore
+      }
+      // Remove the tab while the guest mark is still set so unmount leave
+      // cannot fall through to netcatty:close / A's SSH session.
+      closeSession(sessionId);
+      clearGuestShare(sessionId);
+      toast.error(
+        formatOrgCenterError(err instanceof Error ? err.message : "", t),
+        t("terminal.share.joinFailed"),
+      );
+      throw err;
+    }
+  }, [addOrgShareGuestSession, closeSession, renameSessionInline, t]);
+
+  useEffect(() => {
+    const bridge = netcattyBridge.get();
+    return bridge?.onOrgCenterShareEvent?.((payload) => {
+      const sessionId = String(payload?.sessionId ?? "");
+      if (!sessionId) return;
+      if (payload.type === "stopped") {
+        clearHostShare(sessionId);
+        return;
+      }
+      if (payload.type === "ended") {
+        patchGuestShare(sessionId, { status: "ended" });
+        updateSessionStatus(sessionId, "disconnected");
+        if (payload.reason !== "left" && payload.reason !== "session-closed") {
+          toast.error(payload.message || t("terminal.share.ended"));
+        }
+        return;
+      }
+      if (payload.type === "resize") {
+        patchGuestShare(sessionId, {
+          cols: Number(payload.cols) || undefined,
+          rows: Number(payload.rows) || undefined,
+        });
+        return;
+      }
+      if (payload.type === "joined") {
+        const label = formatOrgShareGuestLabel(
+          getOrgCenterShareSnapshot().guestShares[sessionId]?.pin ?? "",
+          payload.label,
+        );
+        patchGuestShare(sessionId, {
+          status: "active",
+          label,
+          cols: Number(payload.cols) || undefined,
+          rows: Number(payload.rows) || undefined,
+        });
+        if (payload.label) renameSessionInline(sessionId, label);
+      }
+    });
+  }, [renameSessionInline, t, updateSessionStatus]);
+
   // Cold-start landing: open a local terminal once when preferred and nothing
   // was restored. Wait for queued launch intents (deep links / Explorer open)
   // and shell discovery so we neither duplicate tabs nor mislabel WSL/Git Bash.
@@ -1881,6 +1988,7 @@ export function AppSideEffects() {
       handleConnectSerial,
       handleConnectToHost,
       handleCreateLocalTerminal,
+      handleJoinOrgCenterShare,
       handleHotkeyAction,
       handleSessionStatusChange,
       handleTerminalDataCapture,
@@ -1957,6 +2065,7 @@ export function AppSideEffects() {
     handleConnectSerial,
     handleConnectToHost,
     handleCreateLocalTerminal,
+    handleJoinOrgCenterShare,
     handleHotkeyAction,
     handleSessionStatusChange,
     handleTerminalDataCapture,

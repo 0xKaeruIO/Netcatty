@@ -757,8 +757,12 @@ export const SessionTopTab: React.FC<SessionTopTabProps> = memo(({
     activeTabStore.setActiveTabId(session.id);
   }, [session.id]);
   const handleDoubleClick = useMemo(
-    () => createTopTabCopyDoubleClickHandler(onCopySession, session.id),
-    [onCopySession, session.id],
+    () => (
+      session.orgShareRole === 'guest'
+        ? undefined
+        : createTopTabCopyDoubleClickHandler(onCopySession, session.id)
+    ),
+    [onCopySession, session.id, session.orgShareRole],
   );
   const addressTooltip = formatSessionTopTabTooltip(session);
   const tabTitle = formatSessionTopTabLabel(session, dynamicTabTitleMode);
@@ -879,6 +883,7 @@ export const SessionTopTab: React.FC<SessionTopTabProps> = memo(({
         editHost={host}
         onEditHost={onEditHost}
         renderBulkCloseItems={renderBulkCloseItems}
+        isOrgShareGuest={session.orgShareRole === 'guest'}
         t={t}
       />
     </ContextMenu>

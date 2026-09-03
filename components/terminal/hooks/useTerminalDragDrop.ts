@@ -58,6 +58,7 @@ interface UseTerminalDragDropOptions {
     ) => Promise<{ success: boolean; error?: string }>;
   };
   isSensitiveInput?: () => boolean;
+  isFileTransferBlocked?: () => boolean;
   rzMissingFallbackTimeoutMs?: number;
   termRef: React.MutableRefObject<XTerm | null>;
 }
@@ -347,6 +348,7 @@ export function useTerminalDragDrop({
   t,
   terminalBackend,
   isSensitiveInput,
+  isFileTransferBlocked,
   rzMissingFallbackTimeoutMs,
   termRef,
 }: UseTerminalDragDropOptions) {
@@ -391,6 +393,11 @@ export function useTerminalDragDrop({
 
     if (status !== "connected") {
       toast.error(t("terminal.dragDrop.notConnected"), t("terminal.dragDrop.errorTitle"));
+      return;
+    }
+
+    if (isFileTransferBlocked?.()) {
+      toast.error(t("terminal.share.fileTransferUnsupported"));
       return;
     }
 

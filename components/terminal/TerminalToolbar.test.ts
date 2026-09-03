@@ -126,6 +126,46 @@ test("hides SSH history for plugin terminal sessions", () => {
   assert.equal(markup.includes('aria-label="Command history"'), false);
 });
 
+test("shows share only when connected with an organization center", () => {
+  const withCenter = renderToolbar(sshHost, "connected", {
+    orgShareCenters: [{ id: "c1", name: "Lab" }],
+    onStartOrgShare: () => {},
+    onStopOrgShare: () => {},
+  });
+  const withoutCenter = renderToolbar(sshHost, "connected");
+  const disconnected = renderToolbar(sshHost, "disconnected", {
+    orgShareCenters: [{ id: "c1", name: "Lab" }],
+    onStartOrgShare: () => {},
+    onStopOrgShare: () => {},
+  });
+  const guest = renderToolbar(sshHost, "connected", {
+    isOrgShareGuest: true,
+    orgShareCenters: [{ id: "c1", name: "Lab" }],
+    onStartOrgShare: () => {},
+    onStopOrgShare: () => {},
+  });
+
+  assert.equal(withCenter.includes('aria-label="Start sharing"'), true);
+  assert.equal(withoutCenter.includes('aria-label="Start sharing"'), false);
+  assert.equal(disconnected.includes('aria-label="Start sharing"'), false);
+  assert.equal(guest.includes('aria-label="Start sharing"'), false);
+});
+
+test("a single organization center starts sharing from the toolbar button click", () => {
+  assert.match(
+    toolbarSource,
+    /if \(!sharing && orgShareCenters\.length <= 1\)/,
+  );
+  assert.match(toolbarSource, /onClick=\{\(\) => startShare\(\)\}/);
+});
+
+test("disables SFTP while the current session is being shared", () => {
+  const markup = renderToolbar(sshHost, "connected", {
+    orgShare: { status: "active", pin: "123456" },
+  });
+  assert.match(markup, /aria-label="Open SFTP"[^>]*disabled/);
+});
+
 test("shows YMODEM send only for connected serial sessions", () => {
   const connectedSerial = renderToolbar(serialHost, "connected", {
     onSendYmodem: () => {},

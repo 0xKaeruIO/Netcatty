@@ -22,6 +22,7 @@ interface SessionTabContextMenuContentProps {
   editHost?: Host;
   onEditHost?: (host: Host) => void;
   renderBulkCloseItems?: (anchorId: string) => React.ReactNode;
+  isOrgShareGuest?: boolean;
   t: TranslateFn;
 }
 
@@ -39,46 +40,49 @@ export function SessionTabContextMenuContent({
   editHost,
   onEditHost,
   renderBulkCloseItems,
+  isOrgShareGuest = false,
   t,
 }: SessionTabContextMenuContentProps) {
   return (
     <ContextMenuContent>
-      <ContextMenuItem
-        disabled={isSessionReconnectDisabled(sessionStatus, reconnectActive)}
-        onClick={() => onReconnectSession(sessionId)}
-      >
-        {t('terminal.menu.reconnect')}
-      </ContextMenuItem>
+      {!isOrgShareGuest && (
+        <ContextMenuItem
+          disabled={isSessionReconnectDisabled(sessionStatus, reconnectActive)}
+          onClick={() => onReconnectSession(sessionId)}
+        >
+          {t('terminal.menu.reconnect')}
+        </ContextMenuItem>
+      )}
       <ContextMenuItem onClick={() => onRenameSession(sessionId)}>
         {t('common.rename')}
       </ContextMenuItem>
-      {editHost && onEditHost && (
+      {!isOrgShareGuest && editHost && onEditHost && (
         <ContextMenuItem onClick={() => onEditHost(editHost)}>
           {t('terminal.layer.hostTree.editHost')}
         </ContextMenuItem>
       )}
-      {onCopySession && (
+      {!isOrgShareGuest && onCopySession && (
         <ContextMenuItem onClick={() => onCopySession(sessionId)}>
           {t('tabs.copyTab')}
         </ContextMenuItem>
       )}
-      {onDuplicateSession && (
+      {!isOrgShareGuest && onDuplicateSession && (
         <ContextMenuItem onClick={() => onDuplicateSession(sessionId)}>
           {t('tabs.duplicateSession')}
         </ContextMenuItem>
       )}
-      {onCopySessionToNewWindow && (
+      {!isOrgShareGuest && onCopySessionToNewWindow && (
         <ContextMenuItem onClick={() => onCopySessionToNewWindow(sessionId)}>
           {t('tabs.copyTabToNewWindow')}
         </ContextMenuItem>
       )}
-      {onDetachSession && (
+      {!isOrgShareGuest && onDetachSession && (
         <ContextMenuItem onClick={() => onDetachSession(sessionId)}>
           {t('terminal.menu.detach')}
         </ContextMenuItem>
       )}
       <ContextMenuItem className="text-destructive" onClick={() => onCloseSession(sessionId)}>
-        {t('common.close')}
+        {t(isOrgShareGuest ? 'terminal.toolbar.leaveShare' : 'common.close')}
       </ContextMenuItem>
       {renderBulkCloseItems?.(sessionId)}
     </ContextMenuContent>

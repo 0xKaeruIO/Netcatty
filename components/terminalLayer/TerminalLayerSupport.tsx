@@ -1563,6 +1563,7 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
         terminalSettings={terminalSettings}
         sessionId={session.id}
         workspaceId={session.workspaceId}
+        orgShareRole={session.orgShareRole}
         restoreState={session.restoreState}
         pendingInitialCwd={session.pendingInitialCwd}
         shellType={session.shellType}
@@ -1602,10 +1603,10 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
         onCommandSubmitted={onCommandSubmitted}
         onExpandToFocus={inActiveWorkspace && !isFocusMode ? handleExpandToFocus : undefined}
         onTogglePaneMagnification={inActiveWorkspace && (!isFocusMode || isMagnified) ? handleTogglePaneMagnification : undefined}
-        onSplitHorizontal={onSplitSession ? splitHorizontalHandler : undefined}
-        onSplitVertical={onSplitSession ? splitVerticalHandler : undefined}
-        isBroadcastEnabled={broadcastEnabled}
-        onToggleBroadcast={inActiveWorkspace ? workspaceBroadcastHandler : undefined}
+        onSplitHorizontal={session.orgShareRole === "guest" ? undefined : (onSplitSession ? splitHorizontalHandler : undefined)}
+        onSplitVertical={session.orgShareRole === "guest" ? undefined : (onSplitSession ? splitVerticalHandler : undefined)}
+        isBroadcastEnabled={session.orgShareRole === "guest" ? false : broadcastEnabled}
+        onToggleBroadcast={session.orgShareRole === "guest" ? undefined : (inActiveWorkspace ? workspaceBroadcastHandler : undefined)}
         onToggleComposeBar={inActiveWorkspace ? onToggleWorkspaceComposeBar : undefined}
         isWorkspaceComposeBarOpen={inActiveWorkspace ? isComposeBarOpen : undefined}
         onBroadcastInput={broadcastEnabled ? onBroadcastInput : undefined}
@@ -1620,12 +1621,12 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
         showSelectionAIAction={showSelectionAIAction}
         onAddSelectionToAI={onAddSelectionToAI}
         onRename={handleRename}
-        onDetach={inActiveWorkspace ? handleDetach : undefined}
-        onStartSessionDrag={inActiveWorkspace ? onStartSessionDrag : undefined}
-        onEndSessionDrag={inActiveWorkspace ? onEndSessionDrag : undefined}
-        onDetachPointerDown={inActiveWorkspace ? handleDetachPointerDown : undefined}
-        onDetachDragStart={inActiveWorkspace ? handleDetachDragStart : undefined}
-        onDetachDragEnd={inActiveWorkspace ? handleDetachDragEnd : undefined}
+        onDetach={session.orgShareRole === "guest" ? undefined : (inActiveWorkspace ? handleDetach : undefined)}
+        onStartSessionDrag={session.orgShareRole === "guest" ? undefined : (inActiveWorkspace ? onStartSessionDrag : undefined)}
+        onEndSessionDrag={session.orgShareRole === "guest" ? undefined : (inActiveWorkspace ? onEndSessionDrag : undefined)}
+        onDetachPointerDown={session.orgShareRole === "guest" ? undefined : (inActiveWorkspace ? handleDetachPointerDown : undefined)}
+        onDetachDragStart={session.orgShareRole === "guest" ? undefined : (inActiveWorkspace ? handleDetachDragStart : undefined)}
+        onDetachDragEnd={session.orgShareRole === "guest" ? undefined : (inActiveWorkspace ? handleDetachDragEnd : undefined)}
       />
     </div>
   );

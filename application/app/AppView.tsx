@@ -264,7 +264,7 @@ function AppViewInner({ domains }: AppViewProps) {
     convertKnownHostToHost, createWorkspaceFromSessions, createWorkspaceFromTargets, createWorkspaceWithHosts,
     customGroups, currentTerminalTheme, deepLinkHostDraft, draggingSessionId, effectiveKnownHosts, editorTabs, editorWordWrap, emptyVaultConflict,
     followAppTerminalTheme,
-    groupConfigs, handleAddKnownHost, handleConnectSerial, handleConnectToHost, handleCreateLocalTerminal, handleDefaultTerminalThemeChange, handleDeleteHost,
+    groupConfigs, handleAddKnownHost, handleConnectSerial, handleConnectToHost, handleCreateLocalTerminal, handleJoinOrgCenterShare, handleDefaultTerminalThemeChange, handleDeleteHost,
     handleEndSessionDrag, handleFollowAppTerminalThemeChange, handleHostConnectWithProtocolCheck, handleHotkeyAction, handleKeyboardInteractiveCancel, handleKeyboardInteractiveSubmit,
     handleOpenHostFromVaultNote, handleOpenQuickSwitcher, handleOpenSettings, handleOpenVaultHostFromChat, handleOpenVaultNoteFromChat, handleOpenVaultSectionFromChat, handleOpenVaultSnippetFromChat, handleRootContextMenu, handlePassphraseCancel, handlePassphraseSkip, handlePassphraseSubmit, handleProtocolSelect,
     handleRequestCloseEditorTabRef, handleSessionStatusChange, handleSyncNowManual, handleTerminalDataCapture, handleUpdateHostFromTerminal,
@@ -603,6 +603,7 @@ function AppViewInner({ domains }: AppViewProps) {
             onOpenSettings={handleOpenSettings}
             onOpenQuickSwitcher={handleOpenQuickSwitcher}
             onCreateLocalTerminal={handleCreateLocalTerminal}
+            onJoinOrgCenterShare={handleJoinOrgCenterShare}
             onConnectSerial={handleConnectSerial}
             onDeleteHost={handleDeleteHost}
             onConnect={handleConnectToHost}

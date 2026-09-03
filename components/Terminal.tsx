@@ -58,6 +58,17 @@ import {
 import { listPasswordPromptFillCandidates } from "../domain/passwordPromptAssist";
 import { useTerminalBackend } from "../application/state/useTerminalBackend";
 import {
+  clearHostShare,
+  markHostShareActive,
+  markHostShareStarting,
+  useOrgCenterGuestShare,
+  useOrgCenterHostShare,
+} from "../application/state/orgCenterShareStore";
+import { useOrgCenterConnections } from "../application/state/useOrgCenterConnections";
+import { formatOrgCenterError } from "../application/i18n/formatOrgCenterError";
+import { ORG_SHARE_FILE_TRANSFER_MESSAGE_KEY } from "../domain/orgCenterShare";
+import { netcattyBridge } from "../infrastructure/services/netcattyBridge";
+import {
   TERMINAL_AUTO_RECONNECT_DELAY_MS,
   canAttemptTerminalAutoReconnect,
   shouldAutoReconnectAfterExit,
@@ -120,7 +131,6 @@ import {
 } from "@/domain/hostConnectScripts.ts";
 import { isVaultInitialized } from "@/application/state/vaultInitStore.ts";
 import { useVaultSnapshotField } from "@/application/state/vaultSnapshotStore.ts";
-import { netcattyBridge } from "@/infrastructure/services/netcattyBridge.ts";
 import { handleTerminalOscNotification } from "@/application/state/oscDesktopNotifications.ts";
 import { OscNotificationStreamScanner } from "@/domain/terminalOscNotifications.ts";
 import { ScriptExecutionOverlay } from "./terminal/ScriptExecutionOverlay";
@@ -291,6 +301,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
   terminalSettings,
   sessionId,
   workspaceId,
+  orgShareRole,
   restoreState,
   vaultInitializedOverride,
   pendingInitialCwd,
@@ -814,6 +825,29 @@ const TerminalComponent: React.FC<TerminalProps> = ({
   const sudoHintRef = useRef<((active: boolean) => boolean) | undefined>(undefined);
 
   const terminalBackend = useTerminalBackend();
+  const orgCenterConnections = useOrgCenterConnections();
+  const hostShare = useOrgCenterHostShare(sessionId);
+  const guestShare = useOrgCenterGuestShare(sessionId);
+  const isOrgShareGuest = orgShareRole === "guest";
+  const orgShareCenters = useMemo(
+    () => orgCenterConnections.map((connection) => ({ id: connection.id, name: connection.name })),
+    [orgCenterConnections],
+  );
+
+  useEffect(() => {
+    if (!isOrgShareGuest) return;
+    const cols = guestShare?.cols;
+    const rows = guestShare?.rows;
+    if (!cols || !rows) return;
+    const term = termRef.current;
+    if (!term) return;
+    if (term.cols === cols && term.rows === rows) return;
+    try {
+      term.resize(cols, rows);
+    } catch {
+      // Guest display size is best-effort.
+    }
+  }, [guestShare?.cols, guestShare?.rows, isOrgShareGuest]);
   const {
     chooseManualSessionLogPath,
     startManualSessionLog,
@@ -1154,7 +1188,8 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     !isLocalConnection &&
     !isSerialConnection &&
     !isPluginConnection &&
-    host.protocol !== 'telnet';
+    host.protocol !== 'telnet' &&
+    !isOrgShareGuest;
   // Server-stats polling now lives inside <TerminalServerStats> (rendered by
   // TerminalView) so its ~5s refresh only re-renders that widget, not the whole
   // terminal. We just forward `isSupportedOs` via ctx.
@@ -3158,6 +3193,10 @@ const TerminalComponent: React.FC<TerminalProps> = ({
 
   const executeSnippet = useCallback(async (snippet: Snippet) => {
     if (isScriptSnippet(snippet)) {
+      if (isOrgShareGuest) {
+        toast.error(t("terminal.share.guestWriteBlocked"));
+        return;
+      }
       if (!snippetCanRunInTerminal(snippet, host)) {
         toast.error(t('scripts.targets.currentHostMismatch'));
         return;
@@ -3184,7 +3223,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     executeSnippetCommand(command, snippet.noAutoRun, {
       multiLineRunMode: snippet.multiLineRunMode,
     });
-  }, [executeSnippetCommand, host, scriptSessionName, sessionId, t]);
+  }, [executeSnippetCommand, host, isOrgShareGuest, scriptSessionName, sessionId, t]);
 
   const onSnippetShortkeyRef = useRef(executeSnippet);
   onSnippetShortkeyRef.current = executeSnippet;
@@ -3246,7 +3285,85 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     }
   }, [handleUpdateHostFromTerminal, host.id, host.protocol, setRememberedTerminalEncoding, setSessionEncoding]);
 
+  const rejectOrgShareFileTransfer = useCallback(() => {
+    toast.error(t(ORG_SHARE_FILE_TRANSFER_MESSAGE_KEY));
+  }, [t]);
+
+  const handleStartOrgShare = useCallback(async (centerId: string) => {
+    if (isOrgShareGuest) {
+      toast.error(t("terminal.share.guestWriteBlocked"));
+      return;
+    }
+    if (statusRef.current !== "connected") {
+      toast.error(t("terminal.toolbar.availableAfterConnect"));
+      return;
+    }
+    const connection = orgCenterConnections.find((item) => item.id === centerId)
+      ?? orgCenterConnections[0];
+    if (!connection) {
+      toast.error(t("vault.hosts.orgCenterEmpty"));
+      return;
+    }
+    const startShare = netcattyBridge.get()?.orgCenterShareStart;
+    if (typeof startShare !== "function") {
+      toast.error(t("settings.orgCenter.error.bridge"), t("terminal.share.startFailed"));
+      return;
+    }
+    const term = termRef.current;
+    markHostShareStarting(sessionId, connection.id);
+    toast.info(t("terminal.share.starting"));
+    let timeoutId: number | undefined;
+    try {
+      const result = await Promise.race([
+        startShare({
+          sessionId,
+          url: connection.url,
+          apiKey: connection.apiKey,
+          label: host.label || host.hostname || "",
+          cols: term?.cols || 80,
+          rows: term?.rows || 24,
+        }),
+        new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(() => {
+            reject(new Error(t("settings.orgCenter.error.timeout")));
+          }, 20000);
+        }),
+      ]);
+      if (!result?.ok || !result.pin) {
+        throw new Error(t("settings.orgCenter.error.generic"));
+      }
+      markHostShareActive(sessionId, {
+        centerId: connection.id,
+        pin: result.pin,
+        roomId: result.roomId,
+      });
+      toast.success(t("terminal.share.started", { pin: result.pin }));
+    } catch (err) {
+      clearHostShare(sessionId);
+      toast.error(
+        formatOrgCenterError(err instanceof Error ? err.message : "", t),
+        t("terminal.share.startFailed"),
+      );
+    } finally {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    }
+  }, [host.hostname, host.label, isOrgShareGuest, orgCenterConnections, sessionId, t]);
+
+  const handleStopOrgShare = useCallback(async () => {
+    try {
+      await netcattyBridge.get()?.orgCenterShareStop?.(sessionId);
+    } catch (err) {
+      console.warn("[orgCenterShare] stop failed", err);
+    }
+    clearHostShare(sessionId);
+    toast.success(t("terminal.share.stopped"));
+  }, [sessionId, t]);
+
   const handleOpenSFTP = useCallback(async () => {
+    if (isOrgShareGuest || hostShare) {
+      rejectOrgShareFileTransfer();
+      return;
+    }
     if (onOpenSftp) {
       // Delegate to parent (TerminalLayer) for shared SFTP side panel
       const initialPath = await resolveSftpInitialPath();
@@ -3266,9 +3383,13 @@ const TerminalComponent: React.FC<TerminalProps> = ({
       return;
     }
     setShowSFTP(true);
-  }, [host, onOpenSftp, resolveSftpInitialPath, sessionId, showSFTP]);
+  }, [host, hostShare, isOrgShareGuest, onOpenSftp, rejectOrgShareFileTransfer, resolveSftpInitialPath, sessionId, showSFTP]);
 
   const handleSendYmodem = useCallback(async () => {
+    if (isOrgShareGuest || hostShare) {
+      rejectOrgShareFileTransfer();
+      return;
+    }
     if (!isSerialConnection || statusRef.current !== "connected") return;
     if (!selectFileAvailable() || !serialYmodemAvailable()) {
       toast.error(t("terminal.ymodem.unavailable"));
@@ -3299,9 +3420,13 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     } finally {
       setYmodemInProgress(false);
     }
-  }, [isSerialConnection, selectFile, selectFileAvailable, sendSerialYmodem, serialYmodemAvailable, sessionId, t]);
+  }, [hostShare, isOrgShareGuest, isSerialConnection, rejectOrgShareFileTransfer, selectFile, selectFileAvailable, sendSerialYmodem, serialYmodemAvailable, sessionId, t]);
 
   const handleReceiveYmodem = useCallback(async () => {
+    if (isOrgShareGuest || hostShare) {
+      rejectOrgShareFileTransfer();
+      return;
+    }
     if (!isSerialConnection || statusRef.current !== "connected") return;
     if (!selectDirectoryAvailable() || !serialYmodemReceiveAvailable()) {
       toast.error(t("terminal.ymodem.unavailable"));
@@ -3337,8 +3462,10 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     selectDirectory,
     selectDirectoryAvailable,
     serialYmodemReceiveAvailable,
-    sessionId,
     t,
+    hostShare,
+    isOrgShareGuest,
+    rejectOrgShareFileTransfer,
   ]);
 
   const handleCancelConnect = () => {
@@ -3761,6 +3888,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     t,
     terminalBackend,
     isSensitiveInput: () => passwordPromptActiveRef.current,
+    isFileTransferBlocked: () => Boolean(isOrgShareGuest || hostShare),
     termRef,
   });
 
@@ -3896,8 +4024,8 @@ const TerminalComponent: React.FC<TerminalProps> = ({
       onOpenSFTP={handleOpenSFTP}
       onSendYmodem={isSerialConnection ? handleSendYmodem : undefined}
       onReceiveYmodem={isSerialConnection ? handleReceiveYmodem : undefined}
-      onOpenScripts={onOpenScripts ?? (() => {})}
-      onOpenHistory={onOpenHistory}
+      onOpenScripts={isOrgShareGuest ? () => toast.error(t("terminal.share.guestWriteBlocked")) : (onOpenScripts ?? (() => {}))}
+      onOpenHistory={isOrgShareGuest ? undefined : onOpenHistory}
       onOpenTheme={onOpenTheme ?? (() => {})}
       onConfigureOsc7={shouldOfferOsc7SetupAction({
         protocol: host.protocol,
@@ -3916,17 +4044,24 @@ const TerminalComponent: React.FC<TerminalProps> = ({
       }}
       closeLabel={t(opts?.restorePaneLayout
         ? 'terminal.paneMagnification.restore'
-        : 'terminal.toolbar.closeSession')}
+        : isOrgShareGuest
+          ? 'terminal.toolbar.leaveShare'
+          : 'terminal.toolbar.closeSession')}
       isSearchOpen={isSearchOpen}
       onToggleSearch={handleToggleSearch}
-      showLogButton
+      showLogButton={!isOrgShareGuest}
       onToggleSessionLog={handleToggleSessionLog}
       isSessionLogging={isSessionLogging}
       isSessionLogDisabled={status !== "connected" && !isSessionLogging}
       isComposeBarOpen={inWorkspace ? isWorkspaceComposeBarOpen : isComposeBarOpen}
       onToggleComposeBar={inWorkspace ? onToggleComposeBar : () => setIsComposeBarOpen(prev => !prev)}
       terminalEncoding={terminalEncoding}
-      onSetTerminalEncoding={handleSetTerminalEncoding}
+      onSetTerminalEncoding={isOrgShareGuest ? undefined : handleSetTerminalEncoding}
+      isOrgShareGuest={isOrgShareGuest}
+      orgShareCenters={orgShareCenters}
+      orgShare={hostShare ? { status: hostShare.status, pin: hostShare.pin } : null}
+      onStartOrgShare={handleStartOrgShare}
+      onStopOrgShare={handleStopOrgShare}
       recordingIndicator={recorder.isRecording ? (
         <ScriptRecordingIndicator
           elapsedMs={recorder.elapsedMs}
@@ -3941,11 +4076,16 @@ const TerminalComponent: React.FC<TerminalProps> = ({
           }}
         />
       ) : undefined}
-      onStartRecording={status === 'connected' ? handleToolbarRecordingToggle : undefined}
+      onStartRecording={!isOrgShareGuest && status === 'connected' ? handleToolbarRecordingToggle : undefined}
     />
   ), [
     compactToolbar,
     executeSnippet,
+    handleStartOrgShare,
+    handleStopOrgShare,
+    hostShare,
+    isOrgShareGuest,
+    orgShareCenters,
     handleOpenSFTP,
     handleReceiveYmodem,
     handleSendYmodem,
@@ -4318,11 +4458,11 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     onWake: wakeFromHibernateRuntime,
   });
 
-  useTerminalEffects({ CONNECTION_TIMEOUT, Error, XTERM_PERFORMANCE_CONFIG, applyUserCursorPreference, auth, autocompleteCloseRef, autocompleteInputRef, autocompleteKeyEventRef, autocompleteRepositionRef, captureTerminalLogData, chainHosts: resolvedChainHosts, chainProgress, clearTerminalCwd, commandBufferRef, connectionLogBufferRef, containerRef, createPromptLineBreakState, createReplaySafeTerminalLogSanitizer, createXTermRuntime, deferTerminalResizeRef, disableTerminalFontZoomRef, effectiveFontSize, effectiveFontWeight, effectiveTheme, error, executeSnippetCommand, finalizeTerminalLogData, fitAddonRef, fontFamilyId, fontSize, fontWeightFixupDoneRef, forceCloseHibernatedSession, forceSyncRenderAfterResize, handleOsc52ReadRequest, handleTerminalDataCaptureOnce, hasConnectedRef, hasRuntimeRef, host, hotkeySchemeRef, hibernatedRef, identities, inWorkspace, isBootActiveRef, bootEpochRef, isBroadcastEnabledRef, isComposeBarOpen: effectiveComposeBarOpen, isConnectionAwaitingUserInput, isConnectionPastTcpDial, isFocusMode, isFocused, isLocalConnection, isNetworkDevice, isResizing: deferTerminalResize, isRestoringSelectionRef, isSearchOpen, isSerialConnection, isVisible, isVisibleRef, keyBindingsRef, keys, kittyKeyboardProtocolEnabledForSession, knownCwdRef, lastFittedSizeRef, lastToastedErrorRef, logger, mouseTrackingRef, needsHostKeyVerification, onBroadcastInputRef, onBroadcastInterruptPriorityChange, onCommandExecuted, onCommandSubmitted: cwdAwareOnCommandSubmitted, onHotkeyActionRef, onOpenExternalError, onOutputTriggerUserInputRef: noteOutputTriggerUserInputRef, onPluginRuntimeCwdChange: pluginAwareOnRuntimeCwdChange, onSnippetShortkeyRef, onSnippetExecutorChange, onTerminalCwdChange, onTerminalTitleChange, onTerminalBell, onTerminalFontSizeChange, paneLayoutKey, passwordPromptActiveRef, pendingAuthRef, pendingOutputScrollRef, pluginDecorationRefreshRef, pluginDecorationRules, pluginDecorationRulesRef, pluginTerminalLifecycle, pluginTerminalProviderRevision, isPluginTerminalProviderAvailable, requestPluginTerminalProviders, prepareRestoredReconnect, prepareInitialCwdIntent, prevIsResizingRef, promptLineBreakStateRef, resizeSession, resolveHostAuth, resolvedFontFamily, safeFit, scriptRecorderRef: recorderRef, searchAddonRef, serialConfig, serialLineBufferRef, serializeAddonRef, sessionId, sessionRef, sessionStarters, setError, setHasMouseTracking, setIsCancelling, setIsDisconnectedDialogDismissed, requestSearchFocus, setNeedsHostKeyVerification, setPendingHostKeyInfo, setPendingHostKeyRequestId, setProgressLogs, setProgressValue, setShowLogs, setStatus, setTimeLeft, shellType, shouldEnableNativeUserInputAutoScroll, shouldProbeSessionCwd, shouldStartTerminalBackend, vaultInitialized, attachExistingSession, attachAuthorization, attachHomeWebContentsIdRef, snippetsRef, splitResizeActive: isResizing, status, statusRef, sudoAutofillRef, t, teardown, telnetLocalEchoRef, termRef, terminalAltKeyOptions, terminalBackend, terminalContextActionsRef, terminalCwdTracker, terminalDataCapturedRef, terminalLogSanitizerRef, terminalOutputHistory: terminalOutputHistoryRef.current, terminalSettings, terminalSettingsRef, terminalTitleRef, toHostKeyInfo, toast, updateStatus, useEffect, useLayoutEffect, workspaceId, xtermRuntimeRef, zmodem, zmodemToastedRef, restoreState });
+  useTerminalEffects({ CONNECTION_TIMEOUT, Error, XTERM_PERFORMANCE_CONFIG, applyUserCursorPreference, auth, autocompleteCloseRef, autocompleteInputRef, autocompleteKeyEventRef, autocompleteRepositionRef, captureTerminalLogData, chainHosts: resolvedChainHosts, chainProgress, clearTerminalCwd, commandBufferRef, connectionLogBufferRef, containerRef, createPromptLineBreakState, createReplaySafeTerminalLogSanitizer, createXTermRuntime, deferTerminalResizeRef, disableTerminalFontZoomRef, effectiveFontSize, effectiveFontWeight, effectiveTheme, error, executeSnippetCommand, finalizeTerminalLogData, fitAddonRef, fontFamilyId, fontSize, fontWeightFixupDoneRef, forceCloseHibernatedSession, forceSyncRenderAfterResize, handleOsc52ReadRequest, handleTerminalDataCaptureOnce, hasConnectedRef, hasRuntimeRef, host, hotkeySchemeRef, hibernatedRef, identities, inWorkspace, isBootActiveRef, bootEpochRef, isBroadcastEnabledRef, isComposeBarOpen: effectiveComposeBarOpen, isConnectionAwaitingUserInput, isConnectionPastTcpDial, isFocusMode, isFocused, isLocalConnection, isNetworkDevice, isResizing: deferTerminalResize, isRestoringSelectionRef, isSearchOpen, isSerialConnection, isVisible, isVisibleRef, keyBindingsRef, keys, kittyKeyboardProtocolEnabledForSession, knownCwdRef, lastFittedSizeRef, lastToastedErrorRef, logger, mouseTrackingRef, needsHostKeyVerification, onBroadcastInputRef, onBroadcastInterruptPriorityChange, onCommandExecuted, onCommandSubmitted: cwdAwareOnCommandSubmitted, onHotkeyActionRef, onOpenExternalError, onOutputTriggerUserInputRef: noteOutputTriggerUserInputRef, onPluginRuntimeCwdChange: pluginAwareOnRuntimeCwdChange, onSnippetShortkeyRef, onSnippetExecutorChange, onTerminalCwdChange, onTerminalTitleChange, onTerminalBell, onTerminalFontSizeChange, paneLayoutKey, passwordPromptActiveRef, pendingAuthRef, pendingOutputScrollRef, pluginDecorationRefreshRef, pluginDecorationRules, pluginDecorationRulesRef, pluginTerminalLifecycle, pluginTerminalProviderRevision, isPluginTerminalProviderAvailable, requestPluginTerminalProviders, prepareRestoredReconnect, prepareInitialCwdIntent, prevIsResizingRef, promptLineBreakStateRef, resizeSession, resolveHostAuth, resolvedFontFamily, safeFit, scriptRecorderRef: recorderRef, searchAddonRef, serialConfig, serialLineBufferRef, serializeAddonRef, sessionId, sessionRef, sessionStarters, setError, setHasMouseTracking, setIsCancelling, setIsDisconnectedDialogDismissed, requestSearchFocus, setNeedsHostKeyVerification, setPendingHostKeyInfo, setPendingHostKeyRequestId, setProgressLogs, setProgressValue, setShowLogs, setStatus, setTimeLeft, shellType, shouldEnableNativeUserInputAutoScroll, shouldProbeSessionCwd, shouldStartTerminalBackend, vaultInitialized, attachExistingSession, attachAuthorization, attachHomeWebContentsIdRef, snippetsRef, splitResizeActive: isResizing, status, statusRef, sudoAutofillRef, t, teardown, telnetLocalEchoRef, termRef, terminalAltKeyOptions, terminalBackend, terminalContextActionsRef, terminalCwdTracker, terminalDataCapturedRef, terminalLogSanitizerRef, terminalOutputHistory: terminalOutputHistoryRef.current, terminalSettings, terminalSettingsRef, terminalTitleRef, toHostKeyInfo, toast, updateStatus, useEffect, useLayoutEffect, workspaceId, xtermRuntimeRef, zmodem, zmodemToastedRef, restoreState, orgShareRole });
 
   return (
     <>
-      <TerminalView ctx={{ Activity, ArrowDownToLine, ArrowUpFromLine, Button, Clock3, Copy, Cpu, HardDrive, HoverCard, HoverCardContent, HoverCardTrigger, Maximize2, MemoryStick, Radio, RefreshCcw, Sparkles, SquareArrowOutUpRight, Unplug, TerminalAutocomplete, TerminalComposeBar, TerminalConnectionDialog, TerminalContextMenu, TerminalSearchBar, Tooltip, TooltipContent, TooltipTrigger, ZmodemOverwriteDialog, ZmodemProgressIndicator, auth, autocompleteAcceptTextRef, autocompleteCloseRef, autocompleteHostOs, autocompleteInputRef, autocompleteKeyEventRef, autocompleteRepositionRef, autocompleteSettings, canUpdateHost: !!onUpdateHost, chainProgress, cn, compactToolbar, lineTimestampsAvailable, containerRef, effectiveFontSize, effectiveFontWeight, effectiveTheme, error, executeSnippet, executeSnippetCommand, handleAddSelectionToAI: onAddSelectionToAI ? handleAddSelectionToAI : undefined, handleCancelConnect, handleCloseDisconnectedSession, handleCloseSearch, handleDisconnect: (attachExistingSession || compactToolbar) ? undefined : handleDisconnect, handleDismissDisconnectedDialog, handleDragEnter, handleDragLeave, handleDragOver, handleDrop, handleFindNext, handleFindPrevious, handleHostKeyAddAndContinue, handleHostKeyClose, handleHostKeyContinue, handleOsc52ReadResponse, handleOsc7SetupConfirm, handleOsc7SetupOpenChange, handleReceiveYmodem, handleRetry, handleSearch, handleSendYmodem, handleTopOverlayMouseDownCapture, hasMouseTracking, host, hotkeyScheme, inWorkspace, isBroadcastEnabled, isCancelling, isComposeBarOpen: effectiveComposeBarOpen, isConnectionAwaitingUserInput, isDraggingOver, isFocusMode, isFocusedPane, isLocalConnection, remoteDragDropUsesZmodem, isPluginTerminalProviderAvailable, isReconnectActive, isSerialConnection, isSearchOpen, isSupportedOs, isSystemSidebarEligible, isVisible, keyBindings, keys, knownCwdRef, needsHostKeyVerification, onAddSelectionToAI, onBroadcastInput, onCloseSession, onDetach, onDetachDragEnd, onDetachDragStart, onDetachPointerDown, onEndSessionDrag, onExpandToFocus, onTogglePaneMagnification, onOpenSystem, onRename, onSplitHorizontal, onSplitVertical, onStartSessionDrag, onToggleBroadcast, onUpdateHost: handleUpdateHostFromTerminal, osc52ReadPromptVisible, osc7SetupOpen, osc7SetupRunning, passwordPromptActiveRef, pendingHostKeyInfo, progressLogs, progressValue, renderControls, resolvedFontFamily, restoreState, scrollToBottomAfterProgrammaticInput, searchMatchCount, searchFocusToken, scriptExecutionOverlay: activeScriptRun ? (
+      <TerminalView ctx={{ Activity, ArrowDownToLine, ArrowUpFromLine, Button, Clock3, Copy, Cpu, HardDrive, HoverCard, HoverCardContent, HoverCardTrigger, Maximize2, MemoryStick, Radio, RefreshCcw, Sparkles, SquareArrowOutUpRight, Unplug, TerminalAutocomplete, TerminalComposeBar, TerminalConnectionDialog, TerminalContextMenu, TerminalSearchBar, Tooltip, TooltipContent, TooltipTrigger, ZmodemOverwriteDialog, ZmodemProgressIndicator, auth, autocompleteAcceptTextRef, autocompleteCloseRef, autocompleteHostOs, autocompleteInputRef, autocompleteKeyEventRef, autocompleteRepositionRef, autocompleteSettings, canUpdateHost: !!onUpdateHost, chainProgress, cn, compactToolbar, lineTimestampsAvailable, containerRef, effectiveFontSize, effectiveFontWeight, effectiveTheme, error, executeSnippet, executeSnippetCommand, handleAddSelectionToAI: onAddSelectionToAI ? handleAddSelectionToAI : undefined, handleCancelConnect, handleCloseDisconnectedSession, handleCloseSearch, handleDisconnect: (attachExistingSession || compactToolbar || isOrgShareGuest) ? undefined : handleDisconnect, handleDismissDisconnectedDialog, handleDragEnter, handleDragLeave, handleDragOver, handleDrop, handleFindNext, handleFindPrevious, handleHostKeyAddAndContinue, handleHostKeyClose, handleHostKeyContinue, handleOsc52ReadResponse, handleOsc7SetupConfirm, handleOsc7SetupOpenChange, handleReceiveYmodem, handleRetry: isOrgShareGuest ? undefined : handleRetry, handleSearch, handleSendYmodem, handleTopOverlayMouseDownCapture, hasMouseTracking, host, hotkeyScheme, inWorkspace, isBroadcastEnabled, isCancelling, isComposeBarOpen: effectiveComposeBarOpen, isConnectionAwaitingUserInput, isDraggingOver, isFocusMode, isFocusedPane, isLocalConnection, remoteDragDropUsesZmodem, isPluginTerminalProviderAvailable, isReconnectActive, isSerialConnection, isSearchOpen, isSupportedOs, isSystemSidebarEligible, isVisible, keyBindings, keys, knownCwdRef, needsHostKeyVerification, onAddSelectionToAI, onBroadcastInput, onCloseSession, onDetach, onDetachDragEnd, onDetachDragStart, onDetachPointerDown, onEndSessionDrag, onExpandToFocus, onTogglePaneMagnification, onOpenSystem: isOrgShareGuest ? undefined : onOpenSystem, onRename, onSplitHorizontal, onSplitVertical, onStartSessionDrag, onToggleBroadcast, onUpdateHost: handleUpdateHostFromTerminal, osc52ReadPromptVisible, osc7SetupOpen, osc7SetupRunning, passwordPromptActiveRef, pendingHostKeyInfo, progressLogs, progressValue, renderControls, resolvedFontFamily, restoreState, scrollToBottomAfterProgrammaticInput, searchMatchCount, searchFocusToken, scriptExecutionOverlay: activeScriptRun ? (
         <ScriptExecutionOverlay
           run={activeScriptRun}
           onPause={() => { void pauseScriptRun(activeScriptRun.runId); }}
@@ -4331,7 +4471,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
           onDismiss={dismissScriptOverlay}
           compactTopChrome={terminalSettings?.showHostInfoBar === false}
         />
-      ) : null, sessionDisplayName, sessionId, workspaceId, sessionRef, setIsComposeBarOpen, setShowLogs, shouldShowConnectionDialog, showDisconnectedTerminalNotice, showConnectionControls: !attachExistingSession && !compactToolbar, showLogs, showSelectionAIAction: Boolean(showSelectionAIAction && onAddSelectionToAI), isRestoringSelectionRef, snippets, status, sudoHintRef, sudoHintText, passwordPickerState, onPasswordPickerSelect: handlePasswordPickerSelect, passwordPickerTitle, passwordPickerEmptyText, t, termRef, terminalBackend, terminalContextActions, terminalCwdTracker, terminalPreviewVars, terminalSettings, terminalReconnectAvailable: !attachExistingSession, reconnectNoticeMessage, timeLeft, toast, zmodem }} isPaneMagnified={isPaneMagnified} />
+      ) : null, sessionDisplayName, sessionId, workspaceId, sessionRef, setIsComposeBarOpen, setShowLogs, shouldShowConnectionDialog, showDisconnectedTerminalNotice, showConnectionControls: !attachExistingSession && !compactToolbar && !isOrgShareGuest, showLogs, showSelectionAIAction: Boolean(showSelectionAIAction && onAddSelectionToAI && !isOrgShareGuest), isRestoringSelectionRef, snippets, status, sudoHintRef, sudoHintText, passwordPickerState, onPasswordPickerSelect: handlePasswordPickerSelect, passwordPickerTitle, passwordPickerEmptyText, t, termRef, terminalBackend, terminalContextActions, terminalCwdTracker, terminalPreviewVars, terminalSettings, terminalReconnectAvailable: !attachExistingSession && !isOrgShareGuest, reconnectNoticeMessage, timeLeft, toast, zmodem }} isPaneMagnified={isPaneMagnified} />
       <ScriptSaveRecordingDialog
         open={saveRecordingOpen}
         code={recordedCode}

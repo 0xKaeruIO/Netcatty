@@ -650,6 +650,11 @@ export interface TerminalSession {
    */
   ephemeralHost?: boolean;
   /**
+   * Organization-center PTY relay role. Host owns the real SSH/local PTY;
+   * guest is a display/input tab only. Runtime-only — never restored.
+   */
+  orgShareRole?: 'host' | 'guest';
+  /**
    * Runtime marker for sessions opened via MCP host_open while "silent
    * sessions" is enabled. Hidden from the main window's tab bar (TopTabs,
    * QuickSwitcher, orphan tab ordering) and excluded from session-restore

@@ -1691,6 +1691,21 @@ function createPreloadApi(ctx) {
   getAutoUpdate: () => ipcRenderer.invoke("netcatty:update:getAutoUpdate"),
   orgCenterHealth: (url) => ipcRenderer.invoke("netcatty:orgCenter:health", { url }),
   orgCenterFetchCatalog: (url, apiKey) => ipcRenderer.invoke("netcatty:orgCenter:fetchCatalog", { url, apiKey }),
+  orgCenterShareStart: (payload) => ipcRenderer.invoke("netcatty:orgCenterShare:start", payload),
+  orgCenterShareStop: (sessionId) => ipcRenderer.invoke("netcatty:orgCenterShare:stop", { sessionId }),
+  orgCenterShareJoin: (payload) => ipcRenderer.invoke("netcatty:orgCenterShare:join", payload),
+  orgCenterShareLeave: (sessionId) => ipcRenderer.invoke("netcatty:orgCenterShare:leave", { sessionId }),
+  orgCenterShareGuestInput: (sessionId, data) => {
+    ipcRenderer.send("netcatty:orgCenterShare:guestInput", { sessionId, data });
+  },
+  orgCenterShareHostResize: (sessionId, cols, rows) => {
+    ipcRenderer.send("netcatty:orgCenterShare:hostResize", { sessionId, cols, rows });
+  },
+  onOrgCenterShareEvent: (cb) => {
+    const listener = (_event, payload) => cb(payload);
+    ipcRenderer.on("netcatty:orgCenterShare:event", listener);
+    return () => ipcRenderer.removeListener("netcatty:orgCenterShare:event", listener);
+  },
   onUpdateAvailable: (cb) => {
     updateAvailableListeners.add(cb);
     return () => updateAvailableListeners.delete(cb);

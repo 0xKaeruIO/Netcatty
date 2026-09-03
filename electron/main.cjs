@@ -180,6 +180,7 @@ const getGlobalShortcutBridge = createLazyModule("./bridges/globalShortcutBridge
 const getCredentialBridge = createLazyModule("./bridges/credentialBridge.cjs");
 const getAutoUpdateBridge = createLazyModule("./bridges/autoUpdateBridge.cjs");
 const getOrgCenterBridge = createLazyModule("./bridges/orgCenterBridge.cjs");
+const getOrgCenterShareBridge = createLazyModule("./bridges/orgCenterShareBridge.cjs");
 const getAiBridge = createLazyModule("./bridges/aiBridge.cjs");
 const getHttpNetworkProxyBridge = createLazyModule("./bridges/httpNetworkProxyBridge.cjs");
 const getWindowManager = createLazyModule("./bridges/windowManager.cjs");
@@ -566,6 +567,7 @@ const registerBridges = createBridgeRegistrar({
   getCredentialBridge,
   getAutoUpdateBridge,
   getOrgCenterBridge,
+  getOrgCenterShareBridge,
   getAiBridge,
   getHttpNetworkProxyBridge,
   getWindowManager,

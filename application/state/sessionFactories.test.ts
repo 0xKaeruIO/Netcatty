@@ -7,6 +7,7 @@ import { buildTelnetDeepLinkConnectionHost } from "../../domain/telnetDeepLink";
 import { resolveEffectiveTerminalHost } from "../../domain/terminalHostResolution";
 import {
   createHostTerminalSession,
+  createOrgShareGuestSession,
   createSerialTerminalSession,
   createWorkspaceHostTerminalSession,
 } from "./sessionFactories";
@@ -148,4 +149,17 @@ test("host session factories snapshot plugin connection configuration", () => {
   assert.equal(workspace.workspaceId, "workspace-1");
   assert.deepEqual(workspace.pluginConnection, pluginConnection);
   assert.notEqual(workspace.pluginConnection, pluginConnection);
+});
+
+test("createOrgShareGuestSession is connected, ephemeral, and marked as guest", () => {
+  const session = createOrgShareGuestSession("guest-1", {
+    pin: "123456",
+    centerId: "center-1",
+    label: "prod",
+  });
+  assert.equal(session.status, "connected");
+  assert.equal(session.orgShareRole, "guest");
+  assert.equal(session.ephemeralHost, true);
+  assert.equal(session.hostLabel, "prod");
+  assert.equal(session.protocol, "ssh");
 });

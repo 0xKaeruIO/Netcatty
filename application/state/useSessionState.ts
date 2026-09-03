@@ -4,6 +4,7 @@ import { addLogView, getLogViewTabId, removeLogView, type LogView } from './logV
 import {
   createHostTerminalSession,
   createLocalTerminalSession,
+  createOrgShareGuestSession,
   createSerialTerminalSession,
   createWorkspaceHostTerminalSession,
   type LocalTerminalOptions,
@@ -528,6 +529,17 @@ export const useSessionState = ({
     setSessions(prev => [...prev, sessionToAdd]);
     if (!hidden) setActiveTabId(newSession.id);
     return newSession.id;
+  }, [setActiveTabId]);
+
+  const addOrgShareGuestSession = useCallback((options: {
+    pin: string;
+    centerId: string;
+    label?: string;
+  }) => {
+    const sessionId = crypto.randomUUID();
+    setSessions((prev) => [...prev, createOrgShareGuestSession(sessionId, options)]);
+    setActiveTabId(sessionId);
+    return sessionId;
   }, [setActiveTabId]);
 
   const updateSessionStatus = useCallback((sessionId: string, status: TerminalSession['status']) => {
@@ -1374,6 +1386,7 @@ export const useSessionState = ({
     createLocalTerminal,
     createSerialSession,
     connectToHost,
+    addOrgShareGuestSession,
     closeSession,
     closeSessions,
     closeWorkspace,

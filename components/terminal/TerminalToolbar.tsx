@@ -7,6 +7,7 @@ import {
   Check,
   ChevronRight,
   Circle,
+  Copy,
   Download,
   FileText,
   FolderInput,
@@ -17,6 +18,7 @@ import {
   MoreVertical,
   Palette,
   Search,
+  Share2,
   TextCursorInput,
   Upload,
   X,
@@ -34,15 +36,17 @@ import { Button } from '../ui/button';
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ToolbarCustomizeContextMenu } from '../ui/toolbar-item-layout';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { cn } from '../../lib/utils';
+import { toast } from '../ui/toast';
 import HostKeywordHighlightPopover from './HostKeywordHighlightPopover';
 import { collectOwnedPluginMenus, comparePluginMenus, usePluginContributions } from '../../application/state/usePluginContributions';
 import { buildTerminalPluginContributionContext } from '../../application/state/pluginContributionContexts';
 import { PluginContributionIcon } from '../plugins/PluginContributionIcon';
 import { isPluginHostProtocol } from '../../domain/pluginConnection';
+import { cn } from '../../lib/utils';
 
 export const TERMINAL_TOOLBAR_ITEM_IDS = [
   'highlight',
+  'share',
   'sftp',
   'ymodemSend',
   'ymodemReceive',
@@ -64,6 +68,7 @@ export const TERMINAL_TOOLBAR_LAYOUT_DEFAULTS: ToolbarItemLayoutDefaults = {
   order: [...TERMINAL_TOOLBAR_ITEM_IDS],
   placement: {
     highlight: 'show',
+    share: 'show',
     sftp: 'show',
     ymodemSend: 'show',
     ymodemReceive: 'show',
@@ -120,6 +125,11 @@ export interface TerminalToolbarProps {
   onSetTerminalEncoding?: (encoding: 'utf-8' | 'gb18030') => void;
   recordingIndicator?: React.ReactNode;
   onStartRecording?: () => void;
+  isOrgShareGuest?: boolean;
+  orgShareCenters?: Array<{ id: string; name: string }>;
+  orgShare?: { status: 'starting' | 'active'; pin: string } | null;
+  onStartOrgShare?: (centerId: string) => void;
+  onStopOrgShare?: () => void;
 }
 
 export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
@@ -155,6 +165,11 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
   onSetTerminalEncoding,
   recordingIndicator,
   onStartRecording,
+  isOrgShareGuest = false,
+  orgShareCenters = [],
+  orgShare = null,
+  onStartOrgShare,
+  onStopOrgShare,
 }) => {
   const { t } = useI18n();
   const terminalContext = buildTerminalPluginContributionContext({
@@ -185,6 +200,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
     .sort(comparePluginMenus);
   const [highlightPopoverOpen, setHighlightPopoverOpen] = useState(false);
   const [scriptsPopoverOpen, setScriptsPopoverOpen] = useState(false);
+  const [sharePopoverOpen, setSharePopoverOpen] = useState(false);
   // Owned outside the scripts Popover so portalled Dialog focus cannot dismiss
   // the menu and unmount ScriptsSidePanel before the user confirms.
   const [pendingScriptDeleteIds, setPendingScriptDeleteIds] = useState<string[] | null>(null);
@@ -234,33 +250,44 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
       'highlight',
       'compose',
       'search',
-      'scripts',
       'terminalSettings',
     ];
-    if (!hidesSftp) ids.push('sftp');
-    if (isSerialTerminal) {
+    if (!isOrgShareGuest) ids.push('scripts');
+    if (!isOrgShareGuest && status === 'connected' && orgShareCenters.length > 0 && onStartOrgShare && onStopOrgShare) {
+      ids.push('share');
+    }
+    if (!hidesSftp && !isOrgShareGuest) ids.push('sftp');
+    if (isSerialTerminal && !isOrgShareGuest) {
       ids.push('ymodemSend', 'ymodemReceive');
     }
     if (showLogButton) ids.push('sessionLog');
-    if (historySupported) ids.push('history');
-    if (onConfigureOsc7 && !hidesSftp) ids.push('configureOsc7');
-    if (onStartRecording) ids.push('recording');
-    if (encodingSwitchSupported && onSetTerminalEncoding) ids.push('encoding');
+    if (historySupported && !isOrgShareGuest) ids.push('history');
+    if (onConfigureOsc7 && !hidesSftp && !isOrgShareGuest) ids.push('configureOsc7');
+    if (onStartRecording && !isOrgShareGuest) ids.push('recording');
+    if (encodingSwitchSupported && onSetTerminalEncoding && !isOrgShareGuest) ids.push('encoding');
     return ids;
   }, [
     encodingSwitchSupported,
     hidesSftp,
     historySupported,
+    isOrgShareGuest,
     isSerialTerminal,
     onConfigureOsc7,
     onSetTerminalEncoding,
+    onStartOrgShare,
     onStartRecording,
+    onStopOrgShare,
+    orgShareCenters.length,
     showLogButton,
+    status,
   ]);
 
   const itemLabels = useMemo(
     (): Record<TerminalToolbarItemId, string> => ({
       highlight: t('terminal.toolbar.hostHighlight.title'),
+      share: orgShare?.status === 'active'
+        ? t('terminal.toolbar.stopShare')
+        : t('terminal.toolbar.startShare'),
       sftp: t('terminal.toolbar.openSftp'),
       ymodemSend: t('terminal.toolbar.sendYmodem'),
       ymodemReceive: t('terminal.toolbar.receiveYmodem'),
@@ -276,12 +303,13 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
       recording: t('scripts.recording.start'),
       encoding: t('terminal.toolbar.encoding'),
     }),
-    [isSessionLogging, t],
+    [isSessionLogging, orgShare?.status, t],
   );
 
   const itemIcons = useMemo(
     (): Record<TerminalToolbarItemId, React.ReactNode> => ({
       highlight: <Highlighter size={14} />,
+      share: <Share2 size={14} />,
       sftp: <FolderInput size={14} />,
       ymodemSend: <Upload size={14} />,
       ymodemReceive: <Download size={14} />,
@@ -493,6 +521,106 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
             buttonClassName={buttonBase}
           />
         );
+      case 'share': {
+        const pin = orgShare?.pin;
+        const sharing = orgShare?.status === 'active';
+        const starting = orgShare?.status === 'starting';
+        const copyPin = async () => {
+          if (!pin) return;
+          try {
+            await navigator.clipboard.writeText(pin);
+            toast.success(t('terminal.toolbar.copiedPin'));
+          } catch {
+            toast.error(t('terminal.share.copyFailed'));
+          }
+        };
+        const startShare = (centerId?: string) => {
+          const nextId = centerId || orgShareCenters[0]?.id;
+          if (!nextId) {
+            toast.error(t('vault.hosts.orgCenterEmpty'));
+            return;
+          }
+          setSharePopoverOpen(false);
+          void onStartOrgShare?.(nextId);
+        };
+        // Idle + one center: click the icon itself. A tooltip that repeats
+        // "Start sharing" looks like a dialog and swallows the first click.
+        if (!sharing && orgShareCenters.length <= 1) {
+          return (
+            <Button
+              key={id}
+              type="button"
+              variant="secondary"
+              size="icon"
+              className={cn(buttonBase, starting && 'text-primary')}
+              aria-label={t('terminal.toolbar.startShare')}
+              aria-busy={starting}
+              disabled={status !== 'connected'}
+              title={t('terminal.toolbar.startShare')}
+              style={starting ? activeButtonStyle : undefined}
+              onClick={() => startShare()}
+            >
+              <Share2 size={12} />
+            </Button>
+          );
+        }
+        return (
+          <Popover key={id} open={sharePopoverOpen} onOpenChange={setSharePopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className={cn(buttonBase, (sharing || starting) && 'text-primary')}
+                aria-label={sharing ? t('terminal.toolbar.stopShare') : t('terminal.toolbar.startShare')}
+                disabled={status !== 'connected'}
+                style={sharing || starting ? activeButtonStyle : undefined}
+              >
+                <Share2 size={12} />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-1" align="end">
+              {sharing ? (
+                <div className="space-y-1 p-1">
+                  <button
+                    type="button"
+                    className={menuItemClass}
+                    onClick={() => { void copyPin(); }}
+                  >
+                    <Copy size={12} className="shrink-0" />
+                    <span className="flex-1 text-left font-mono tracking-[0.3em]">{pin}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={menuItemClass}
+                    onClick={() => {
+                      setSharePopoverOpen(false);
+                      onStopOrgShare?.();
+                    }}
+                  >
+                    <X size={12} className="shrink-0" />
+                    <span className="flex-1 text-left truncate">{t('terminal.toolbar.stopShare')}</span>
+                  </button>
+                </div>
+              ) : (
+                orgShareCenters.map((center) => (
+                  <button
+                    key={center.id}
+                    type="button"
+                    className={menuItemClass}
+                    onClick={() => startShare(center.id)}
+                  >
+                    <Share2 size={12} className="shrink-0" />
+                    <span className="flex-1 text-left truncate">
+                      {t('terminal.toolbar.shareFrom', { name: center.name })}
+                    </span>
+                  </button>
+                ))
+              )}
+            </PopoverContent>
+          </Popover>
+        );
+      }
       case 'sftp':
         return (
           <Tooltip key={id}>
@@ -507,7 +635,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
                     : t('terminal.toolbar.availableAfterConnect')
                 }
                 onClick={onOpenSFTP}
-                disabled={status !== 'connected'}
+                disabled={status !== 'connected' || Boolean(orgShare)}
               >
                 <FolderInput size={12} />
               </Button>
@@ -531,7 +659,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
                   status === 'connected' ? t('terminal.toolbar.sendYmodem') : unavailableYmodemSendLabel
                 }
                 onClick={onSendYmodem}
-                disabled={status !== 'connected' || !onSendYmodem}
+                disabled={status !== 'connected' || !onSendYmodem || Boolean(orgShare)}
               >
                 <Upload size={12} />
               </Button>
@@ -557,7 +685,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
                     : unavailableYmodemReceiveLabel
                 }
                 onClick={onReceiveYmodem}
-                disabled={status !== 'connected' || !onReceiveYmodem}
+                disabled={status !== 'connected' || !onReceiveYmodem || Boolean(orgShare)}
               >
                 <Download size={12} />
               </Button>
@@ -800,13 +928,42 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
     switch (id as TerminalToolbarItemId) {
       case 'highlight':
         return null; // popover-heavy; only useful inline
-      case 'sftp':
+      case 'share':
         return (
           <PopoverClose asChild key={id}>
             <button
               type="button"
               className={menuItemClass}
               disabled={status !== 'connected'}
+              onClick={() => {
+                if (orgShare?.status === 'active') {
+                  onStopOrgShare?.();
+                  return;
+                }
+                const centerId = orgShareCenters[0]?.id;
+                if (orgShareCenters.length <= 1 && centerId) {
+                  void onStartOrgShare?.(centerId);
+                  return;
+                }
+                setSharePopoverOpen(true);
+              }}
+            >
+              <Share2 size={12} className="shrink-0" />
+              <span className="flex-1 text-left truncate">
+                {orgShare?.status === 'active'
+                  ? t('terminal.toolbar.sharePin', { pin: orgShare.pin })
+                  : t('terminal.toolbar.startShare')}
+              </span>
+            </button>
+          </PopoverClose>
+        );
+      case 'sftp':
+        return (
+          <PopoverClose asChild key={id}>
+            <button
+              type="button"
+              className={menuItemClass}
+              disabled={status !== 'connected' || Boolean(orgShare)}
               onClick={onOpenSFTP}
             >
               <FolderInput size={12} className="shrink-0" />
@@ -824,7 +981,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
             <button
               type="button"
               className={menuItemClass}
-              disabled={status !== 'connected' || !onSendYmodem}
+              disabled={status !== 'connected' || !onSendYmodem || Boolean(orgShare)}
               onClick={onSendYmodem}
             >
               <Upload size={12} className="shrink-0" />
@@ -842,7 +999,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
             <button
               type="button"
               className={menuItemClass}
-              disabled={status !== 'connected' || !onReceiveYmodem}
+              disabled={status !== 'connected' || !onReceiveYmodem || Boolean(orgShare)}
               onClick={onReceiveYmodem}
             >
               <Download size={12} className="shrink-0" />

@@ -1,5 +1,9 @@
 import { useCallback, useMemo } from "react";
 import { netcattyBridge } from "../../infrastructure/services/netcattyBridge";
+import {
+  clearGuestShare,
+  isOrgShareGuestSession,
+} from "./orgCenterShareStore";
 import type { TerminalSessionExitEvent } from "./resolveTerminalSessionExitIntent";
 
 type PluginConnectionStartOptions = NetcattyPluginConnectionStartRequest & {
@@ -199,11 +203,27 @@ export const useTerminalBackend = () => {
 
   const writeToSession = useCallback((sessionId: string, data: string, options?: Parameters<NonNullable<NetcattyBridge["writeToSession"]>>[2]) => {
     const bridge = netcattyBridge.get();
+    if (isOrgShareGuestSession(sessionId)) {
+      try {
+        bridge?.orgCenterShareGuestInput?.(sessionId, data);
+      } catch (err) {
+        console.warn("[orgCenterShare] guest input failed", err);
+      }
+      return;
+    }
     bridge?.writeToSession?.(sessionId, data, options);
   }, []);
 
   const interruptSession = useCallback((sessionId: string, trace?: NetcattyTerminalInterruptTrace) => {
     const bridge = netcattyBridge.get();
+    if (isOrgShareGuestSession(sessionId)) {
+      try {
+        bridge?.orgCenterShareGuestInput?.(sessionId, "\x03");
+      } catch (err) {
+        console.warn("[orgCenterShare] guest interrupt failed", err);
+      }
+      return;
+    }
     if (bridge?.interruptSession) {
       bridge.interruptSession(sessionId, trace);
       return;
@@ -212,6 +232,7 @@ export const useTerminalBackend = () => {
   }, []);
 
   const resizeSession = useCallback((sessionId: string, cols: number, rows: number) => {
+    if (isOrgShareGuestSession(sessionId)) return;
     const bridge = netcattyBridge.get();
     bridge?.resizeSession?.(sessionId, cols, rows);
   }, []);
@@ -278,6 +299,15 @@ export const useTerminalBackend = () => {
 
   const closeSession = useCallback(async (sessionId: string, options?: { bootEpoch?: number }) => {
     const bridge = netcattyBridge.get();
+    if (isOrgShareGuestSession(sessionId)) {
+      try {
+        await bridge?.orgCenterShareLeave?.(sessionId);
+      } catch (err) {
+        console.warn("[orgCenterShare] guest leave failed", err);
+      }
+      clearGuestShare(sessionId);
+      return;
+    }
     await bridge?.closeSession?.(sessionId, options);
   }, []);
 

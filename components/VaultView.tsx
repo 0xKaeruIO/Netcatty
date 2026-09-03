@@ -228,6 +228,7 @@ interface VaultViewProps {
   onOpenSettings: () => void;
   onOpenQuickSwitcher: () => void;
   onCreateLocalTerminal: () => void;
+  onJoinOrgCenterShare?: (centerId: string, pin: string) => Promise<void> | void;
   onConnectSerial?: (
     config: SerialConfig,
     options?: { charset?: string },
@@ -318,6 +319,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   onOpenSettings,
   onOpenQuickSwitcher,
   onCreateLocalTerminal,
+  onJoinOrgCenterShare,
   onConnectSerial,
   onDeleteHost,
   onConnect,
@@ -1505,6 +1507,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           onCommitPluginImporterData,
           onConnectSerial,
           onCreateLocalTerminal,
+          onJoinOrgCenterShare,
           onDeleteHost,
           onImportOrReuseKey,
           onOpenHostFromNote,

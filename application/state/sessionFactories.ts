@@ -118,6 +118,26 @@ export const createHostTerminalSession = (
   };
 };
 
+export const createOrgShareGuestSession = (
+  sessionId: string,
+  options: { pin: string; centerId: string; label?: string },
+): TerminalSession => {
+  const pin = String(options.pin ?? "").trim();
+  const label = options.label?.trim() || `Share · ${pin}`;
+  return {
+    id: sessionId,
+    hostId: `org-share-guest-${options.centerId}`,
+    hostLabel: label,
+    hostname: label,
+    username: "",
+    status: "connected",
+    protocol: "ssh",
+    port: 22,
+    ephemeralHost: true,
+    orgShareRole: "guest",
+  };
+};
+
 export const createWorkspaceHostTerminalSession = (
   sessionId: string,
   host: Host,

@@ -13,6 +13,8 @@ import {
 import { sessionActivityStore } from '../application/state/sessionActivityStore';
 import { sessionCapabilitiesStore } from '../application/state/sessionCapabilitiesStore';
 import { useTerminalBackend } from '../application/state/useTerminalBackend';
+import { shouldBlockOrgShareFileTransferForSession } from '../application/state/orgCenterShareStore';
+import { ORG_SHARE_FILE_TRANSFER_MESSAGE_KEY } from '../domain/orgCenterShare';
 import {
   useCodingCliSessionSignals,
 } from '../application/state/codingCliSessionSignalController';
@@ -841,6 +843,10 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     originSessionId?: string,
     sourceSessionId?: string,
   ) => {
+    if (originSessionId && shouldBlockOrgShareFileTransferForSession(originSessionId)) {
+      toast.error(t(ORG_SHARE_FILE_TRANSFER_MESSAGE_KEY));
+      return;
+    }
     const tabId = activeTabIdRef.current;
     if (!tabId) return;
 
@@ -1648,15 +1654,28 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     resizeSidePanelSplitForTab(tabId, splitId, sizes);
   }, [resizeSidePanelSplitForTab]);
 
+  const rejectOrgShareSidePanelWrite = useCallback((sessionId?: string) => {
+    const id = sessionId
+      ?? activeWorkspaceRef.current?.focusedSessionId
+      ?? activeSessionRef.current?.id;
+    if (id && shouldBlockOrgShareFileTransferForSession(id)) {
+      toast.error(t(ORG_SHARE_FILE_TRANSFER_MESSAGE_KEY));
+      return true;
+    }
+    return false;
+  }, [t]);
+
   // Toggle SFTP from activity bar header
   const handleToggleSftpFromBar = useCallback(() => {
+    if (rejectOrgShareSidePanelWrite()) return;
     handleSwitchSidePanelTab('sftp');
-  }, [handleSwitchSidePanelTab]);
+  }, [handleSwitchSidePanelTab, rejectOrgShareSidePanelWrite]);
 
   // Open scripts side panel (called from Terminal toolbar)
   const handleOpenScripts = useCallback(() => {
+    if (rejectOrgShareSidePanelWrite()) return;
     handleSwitchSidePanelTab('scripts');
-  }, [handleSwitchSidePanelTab]);
+  }, [handleSwitchSidePanelTab, rejectOrgShareSidePanelWrite]);
 
   const handleToggleScriptsSidePanel = useCallback(() => {
     const tabId = activeTabIdRef.current;
@@ -1717,8 +1736,9 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   }, [handleSwitchSidePanelTab]);
 
   const handleOpenSystem = useCallback(() => {
+    if (rejectOrgShareSidePanelWrite()) return;
     handleSwitchSidePanelTab('system');
-  }, [handleSwitchSidePanelTab]);
+  }, [handleSwitchSidePanelTab, rejectOrgShareSidePanelWrite]);
 
   const handleOpenNotes = useCallback(() => {
     const tabId = activeTabIdRef.current;

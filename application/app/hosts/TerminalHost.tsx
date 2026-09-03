@@ -196,6 +196,7 @@ export function TerminalHost() {
       handleConnectSerial: handlers.handleConnectSerial,
       handleConnectToHost: handlers.handleConnectToHost,
       handleCreateLocalTerminal: handlers.handleCreateLocalTerminal,
+      handleJoinOrgCenterShare: handlers.handleJoinOrgCenterShare,
       handleDefaultTerminalThemeChange,
       handleFollowAppTerminalThemeChange,
       handleHotkeyAction: handlers.handleHotkeyAction,

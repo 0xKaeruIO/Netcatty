@@ -12,6 +12,7 @@ import {
 import { STORAGE_KEY_VAULT_HOST_PANEL_WIDTH } from "@/infrastructure/config/storageKeys.ts";
 import { VaultHostListSection } from "./VaultHostListSection";
 import { VaultOrgCenterSyncMenu } from "./VaultOrgCenterSyncMenu";
+import { VaultJoinShareMenu } from "./VaultJoinShareMenu";
 import { VaultImportProgressPanel } from "./ImportVaultDialog";
 import {
   VaultHeaderSearch,
@@ -244,6 +245,7 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
     onCreateLocalTerminal,
     onDeleteHost,
     onImportOrReuseKey,
+    onJoinOrgCenterShare,
     onOpenLogView,
     onOpenSettings,
     onRunSnippet,
@@ -1014,6 +1016,10 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                   onUpdateHosts={onUpdateHosts}
                   onUpdateKeys={onUpdateKeys}
                   onUpdateCustomGroups={onUpdateCustomGroups}
+                  onOpenSettings={onOpenSettings}
+                />
+                <VaultJoinShareMenu
+                  onJoinShare={onJoinOrgCenterShare}
                   onOpenSettings={onOpenSettings}
                 />
               </div>

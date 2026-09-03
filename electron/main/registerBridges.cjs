@@ -104,6 +104,7 @@ function createBridgeRegistrar(context) {
     getCredentialBridge,
     getAutoUpdateBridge,
     getOrgCenterBridge,
+    getOrgCenterShareBridge,
     getAiBridge,
     getHttpNetworkProxyBridge,
     getWindowManager,
@@ -136,6 +137,9 @@ function createBridgeRegistrar(context) {
     const credentialBridge = getCredentialBridge();
     const autoUpdateBridge = getAutoUpdateBridge();
     const orgCenterBridge = getOrgCenterBridge();
+    const orgCenterShareBridge = typeof getOrgCenterShareBridge === "function"
+      ? getOrgCenterShareBridge()
+      : { registerHandlers() {} };
     const aiBridge = getAiBridge();
     const httpNetworkProxyBridge = getHttpNetworkProxyBridge();
     const vaultBackupBridge = getVaultBackupBridge();
@@ -497,6 +501,10 @@ function createBridgeRegistrar(context) {
     autoUpdateBridge.init(deps);
     autoUpdateBridge.registerHandlers(ipcMain);
     orgCenterBridge.registerHandlers(ipcMain);
+    orgCenterShareBridge.registerHandlers(ipcMain, {
+      terminalWorkerManager,
+      terminalBridge,
+    });
     aiBridge.registerHandlers(ipcMain);
     httpNetworkProxyBridge.registerHandlers(ipcMain, electronModule);
     crashLogBridge.registerHandlers(ipcMain);
