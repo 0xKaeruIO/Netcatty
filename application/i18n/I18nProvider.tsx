@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { DEFAULT_UI_LOCALE, resolveSupportedLocale } from '../../infrastructure/config/i18n';
+import { DEFAULT_UI_LOCALE, FALLBACK_UI_LOCALE, resolveSupportedLocale } from '../../infrastructure/config/i18n';
 import { MESSAGES_BY_LOCALE } from './messages';
 
 type InterpolationValues = Record<string, string | number | boolean | null | undefined>;
@@ -36,7 +36,7 @@ const resolveMessage = (resolvedLocale: string, key: string): string | undefined
   const baseKey = Object.keys(MESSAGES_BY_LOCALE).find((k) => k === base || k.startsWith(`${base}-`));
   const baseHit = baseKey ? MESSAGES_BY_LOCALE[baseKey]?.[key] : undefined;
   if (baseHit) return baseHit;
-  return MESSAGES_BY_LOCALE[DEFAULT_UI_LOCALE]?.[key];
+  return MESSAGES_BY_LOCALE[FALLBACK_UI_LOCALE]?.[key];
 };
 
 export const I18nProvider: React.FC<{ locale: string; children: React.ReactNode }> = ({

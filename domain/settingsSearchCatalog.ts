@@ -811,6 +811,13 @@ export const SETTINGS_SEARCH_CATALOG: readonly SettingsSearchEntry[] = [
     sectionKey: "settings.update.title",
   },
   {
+    id: "system-org-center",
+    tab: "system",
+    labelKey: "settings.orgCenter.title",
+    descriptionKey: "settings.orgCenter.hint",
+    keywords: ["org", "center", "catalog", "组织", "中心", "节点"],
+  },
+  {
     id: "system-auto-launch",
     tab: "system",
     labelKey: "settings.autoLaunch.enabled",

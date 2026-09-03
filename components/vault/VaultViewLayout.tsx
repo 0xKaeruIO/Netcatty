@@ -11,6 +11,7 @@ import {
 } from "../../domain/vaultGroupSelection";
 import { STORAGE_KEY_VAULT_HOST_PANEL_WIDTH } from "@/infrastructure/config/storageKeys.ts";
 import { VaultHostListSection } from "./VaultHostListSection";
+import { VaultOrgCenterSyncMenu } from "./VaultOrgCenterSyncMenu";
 import { VaultImportProgressPanel } from "./ImportVaultDialog";
 import {
   VaultHeaderSearch,
@@ -945,10 +946,10 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
               <div
                 ref={newHostActionsRef}
                 className={cn(
-                  "flex items-center app-no-drag overflow-hidden transition-[max-width,opacity,margin] duration-200 ease-in-out",
+                  "flex items-center gap-2 app-no-drag overflow-hidden transition-[max-width,opacity,margin] duration-200 ease-in-out",
                   isHostPanelOpen
                     ? "max-w-0 opacity-0 -ml-2 pointer-events-none"
-                    : "max-w-[260px] opacity-100",
+                    : "max-w-[420px] opacity-100",
                 )}
                 aria-hidden={isHostPanelOpen ? true : undefined}
                 inert={isHostPanelOpen ? true : undefined}
@@ -1006,6 +1007,15 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                     </Button>
                   </DropdownContent>
                 </Dropdown>
+                <VaultOrgCenterSyncMenu
+                  hosts={hosts}
+                  keys={keys}
+                  customGroups={customGroups}
+                  onUpdateHosts={onUpdateHosts}
+                  onUpdateKeys={onUpdateKeys}
+                  onUpdateCustomGroups={onUpdateCustomGroups}
+                  onOpenSettings={onOpenSettings}
+                />
               </div>
               {/* Terminal + Serial — collapse together with an animation when
                 the host details / new-host aside panel is open, freeing

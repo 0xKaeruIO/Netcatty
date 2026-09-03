@@ -101,6 +101,7 @@ function createBridgeRegistrarForTest({
     getGlobalShortcutBridge: () => noopBridge,
     getCredentialBridge: () => noopBridge,
     getAutoUpdateBridge: () => noopBridge,
+    getOrgCenterBridge: () => noopBridge,
     getAiBridge: () => noopBridge,
     getHttpNetworkProxyBridge: () => noopBridge,
     getWindowManager: () => ({}),

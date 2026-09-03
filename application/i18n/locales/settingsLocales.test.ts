@@ -68,6 +68,28 @@ test("localized settings include network proxy labels", () => {
   }
 });
 
+test("localized settings include organization center labels", () => {
+  const keys = [
+    "settings.orgCenter.title",
+    "settings.orgCenter.hint",
+    "settings.orgCenter.url",
+    "settings.orgCenter.apiKey",
+    "settings.orgCenter.add",
+    "settings.orgCenter.sync",
+    "settings.orgCenter.remove",
+    "vault.hosts.orgCenter",
+    "vault.hosts.orgCenterSync",
+    "vault.hosts.orgCenterSyncFrom",
+    "vault.hosts.orgCenterEmpty",
+    "vault.hosts.orgCenterOpenSettings",
+  ];
+
+  for (const locale of LOCALIZED_SETTINGS_LOCALES) {
+    const missing = keys.filter((key) => !locale.messages[key]);
+    assert.deepEqual(missing, [], `${locale.name} is missing organization center labels`);
+  }
+});
+
 test("localized settings include OSC desktop notification labels", () => {
   const keys = [
     "settings.terminal.behavior.oscNotifications",

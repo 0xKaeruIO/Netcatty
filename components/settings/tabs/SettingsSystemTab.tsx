@@ -17,6 +17,7 @@ import { Toggle, Select, SettingRow, SectionHeader, SettingCard, SettingHint, Se
 import { cn } from "../../../lib/utils";
 import { isAppLockOverlayActive } from '../../../infrastructure/appLockOverlayDom';
 import { AppLockSettingsSection } from './AppLockSettingsSection';
+import { OrgCenterSettings } from "../OrgCenterSettings";
 
 interface CrashLogFile {
   fileName: string;
@@ -608,6 +609,8 @@ const SettingsSystemTab: React.FC<SettingsSystemTabProps> = ({
               )}
               {t('settings.update.hint')}
             </SettingHint>
+
+          <OrgCenterSettings />
 
           <SectionHeader title={t("settings.autoLaunch.title")} />
             <SettingCard className="py-4">

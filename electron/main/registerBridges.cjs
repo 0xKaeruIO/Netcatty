@@ -103,6 +103,7 @@ function createBridgeRegistrar(context) {
     getGlobalShortcutBridge,
     getCredentialBridge,
     getAutoUpdateBridge,
+    getOrgCenterBridge,
     getAiBridge,
     getHttpNetworkProxyBridge,
     getWindowManager,
@@ -134,6 +135,7 @@ function createBridgeRegistrar(context) {
     const globalShortcutBridge = getGlobalShortcutBridge();
     const credentialBridge = getCredentialBridge();
     const autoUpdateBridge = getAutoUpdateBridge();
+    const orgCenterBridge = getOrgCenterBridge();
     const aiBridge = getAiBridge();
     const httpNetworkProxyBridge = getHttpNetworkProxyBridge();
     const vaultBackupBridge = getVaultBackupBridge();
@@ -165,9 +167,9 @@ function createBridgeRegistrar(context) {
             dialog: electronModule.dialog,
             window: win,
           }),
-          getLocale: () => getWindowManager().getCurrentLanguage?.() ?? "en",
+          getLocale: () => getWindowManager().getCurrentLanguage?.() ?? "zh-CN",
           requestTerminalInterceptorSelection: async ({ direction, providers }) => {
-            const messages = terminalInterceptorMessages(getWindowManager().getCurrentLanguage?.() ?? "en");
+            const messages = terminalInterceptorMessages(getWindowManager().getCurrentLanguage?.() ?? "zh-CN");
             const buttons = [
               ...providers.map(terminalInterceptorChoiceLabel),
               messages.noInterceptor,
@@ -186,7 +188,7 @@ function createBridgeRegistrar(context) {
               : null;
           },
           showTerminalInterceptorWarning: (warning) => {
-            const messages = terminalInterceptorMessages(getWindowManager().getCurrentLanguage?.() ?? "en");
+            const messages = terminalInterceptorMessages(getWindowManager().getCurrentLanguage?.() ?? "zh-CN");
             void electronModule.dialog.showMessageBox(win, {
               type: "warning",
               title: messages.warningTitle,
@@ -244,7 +246,7 @@ function createBridgeRegistrar(context) {
       let applicationMenuIconGeneration = 0;
       const applicationMenuProvider = () => {
           const snapshot = pluginHostService.contributionService.snapshot({
-            locale: windowManager.getCurrentLanguage?.() ?? "en",
+            locale: windowManager.getCurrentLanguage?.() ?? "zh-CN",
             context: { "netcatty.surface": "application" },
           });
           return snapshot.plugins.flatMap((plugin) => {
@@ -494,6 +496,7 @@ function createBridgeRegistrar(context) {
     credentialBridge.registerHandlers(ipcMain, electronModule);
     autoUpdateBridge.init(deps);
     autoUpdateBridge.registerHandlers(ipcMain);
+    orgCenterBridge.registerHandlers(ipcMain);
     aiBridge.registerHandlers(ipcMain);
     httpNetworkProxyBridge.registerHandlers(ipcMain, electronModule);
     crashLogBridge.registerHandlers(ipcMain);

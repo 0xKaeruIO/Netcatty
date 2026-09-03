@@ -1689,6 +1689,8 @@ function createPreloadApi(ctx) {
   getUpdateStatus: () => ipcRenderer.invoke("netcatty:update:getStatus"),
   setAutoUpdate: (enabled) => ipcRenderer.invoke("netcatty:update:setAutoUpdate", { enabled }),
   getAutoUpdate: () => ipcRenderer.invoke("netcatty:update:getAutoUpdate"),
+  orgCenterHealth: (url) => ipcRenderer.invoke("netcatty:orgCenter:health", { url }),
+  orgCenterFetchCatalog: (url, apiKey) => ipcRenderer.invoke("netcatty:orgCenter:fetchCatalog", { url, apiKey }),
   onUpdateAvailable: (cb) => {
     updateAvailableListeners.add(cb);
     return () => updateAvailableListeners.delete(cb);

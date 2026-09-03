@@ -53,6 +53,30 @@ declare global {
     getAutoUpdate?(): Promise<{ enabled: boolean }>;
     setAutoUpdate?(enabled: boolean): Promise<{ success: boolean }>;
 
+    orgCenterHealth?(url: string): Promise<{ ok: boolean; name: string; version: number }>;
+    orgCenterFetchCatalog?(url: string, apiKey: string): Promise<{
+      version: 1;
+      center: { id: string; name: string };
+      generatedAt: number;
+      hosts: Array<{
+        id: string;
+        label: string;
+        hostname: string;
+        port: number;
+        username: string;
+        group: string;
+        tags: string[];
+        os: 'linux' | 'windows' | 'macos';
+        protocol: 'ssh' | 'telnet';
+        deviceType?: 'general' | 'network';
+        notes: string;
+        password?: string;
+        privateKey?: string;
+        passphrase?: string;
+        updatedAt: number;
+      }>;
+    }>;
+
     // SSH diagnostic logs
     getSshDebugLogInfo?(): Promise<{
       enabled: boolean;

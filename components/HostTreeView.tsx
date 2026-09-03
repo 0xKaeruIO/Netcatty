@@ -734,6 +734,7 @@ const HostTreeItem: React.FC<HostTreeItemProps> = ({
   const normalizedHostClickBehavior: HostClickBehavior = hostClickBehavior === 'select'
     ? 'select'
     : 'connect';
+  const { t } = useI18n();
 
   return (
     <ContextMenu>
@@ -833,6 +834,11 @@ const HostTreeItem: React.FC<HostTreeItemProps> = ({
                 >
                   <Edit2 size={12} />
                 </button>
+                {host.orgCenterId && (
+                  <span className="text-[10px] font-medium px-1.5 h-4 leading-4 rounded bg-secondary text-secondary-foreground shrink-0">
+                    {t("vault.hosts.orgCenter")}
+                  </span>
+                )}
                 <HostNotesIndicator notes={host.notes} />
               </div>
               <div className="truncate text-[11px] leading-4 text-muted-foreground">

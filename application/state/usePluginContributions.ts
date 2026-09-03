@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DEFAULT_UI_LOCALE } from '../../infrastructure/config/i18n';
 import { netcattyBridge } from '../../infrastructure/services/netcattyBridge';
 import {
   getSharedPluginRuntimeStatus,
@@ -6,7 +7,7 @@ import {
 } from './pluginRuntimeStatusCache';
 
 const EMPTY_SNAPSHOT: NetcattyPluginContributionSnapshot = Object.freeze({
-  locale: 'en',
+  locale: DEFAULT_UI_LOCALE,
   plugins: Object.freeze([]),
 });
 

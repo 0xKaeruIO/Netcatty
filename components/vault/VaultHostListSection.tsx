@@ -1085,9 +1085,9 @@ export function VaultHostListSection({ ctx }: { ctx: VaultHostListSectionContext
                                                 {safeHost.label}
                                               </span>
                                               {viewMode !== "grid" && renderHostEditButton(host, true)}
-                                              {safeHost.managedSourceId && (
+                                              {(safeHost.orgCenterId || safeHost.managedSourceId) && (
                                                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
-                                                  managed
+                                                  {safeHost.orgCenterId ? t("vault.hosts.orgCenter") : "managed"}
                                                 </Badge>
                                               )}
                                               <HostNotesIndicator notes={safeHost.notes} />
@@ -1234,9 +1234,9 @@ export function VaultHostListSection({ ctx }: { ctx: VaultHostListSectionContext
                                           {safeHost.label}
                                         </span>
                                         {viewMode !== "grid" && renderHostEditButton(host, true)}
-                                        {safeHost.managedSourceId && (
+                                        {(safeHost.orgCenterId || safeHost.managedSourceId) && (
                                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
-                                            managed
+                                            {safeHost.orgCenterId ? t("vault.hosts.orgCenter") : "managed"}
                                           </Badge>
                                         )}
                                         <HostNotesIndicator notes={safeHost.notes} />

@@ -3,15 +3,18 @@ export type LocaleOption = {
   label: string;
 };
 
-export const DEFAULT_UI_LOCALE = 'en';
+export const DEFAULT_UI_LOCALE = 'zh-CN';
+
+/** Catalog used when the active locale is missing a message key. */
+export const FALLBACK_UI_LOCALE = 'en';
 
 // Add new languages by appending to this list and providing message dictionaries.
 export const SUPPORTED_UI_LOCALES: LocaleOption[] = [
+  { id: 'zh-CN', label: '简体中文' },
+  { id: 'zh-TW', label: '繁體中文' },
   { id: 'en', label: 'English' },
   { id: 'es', label: 'Español' },
   { id: 'ru', label: 'Русский' },
-  { id: 'zh-CN', label: '简体中文' },
-  { id: 'zh-TW', label: '繁體中文' },
 ];
 
 const isSupportedLocale = (locale: string): boolean => {

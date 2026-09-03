@@ -10,11 +10,43 @@ import {
   registerVaultSnapshotActions,
 } from '../../state/vaultSnapshotStore';
 import { useVaultState } from '../../state/useVaultState';
+import { useOrgCenterState } from '../../state/useOrgCenterState';
 import { getEffectiveKnownHosts } from '../../../infrastructure/syncHelpers';
+import type { Host, SSHKey } from '../../../domain/models';
 
 export type VaultPublisherProps = {
   children?: ReactNode;
 };
+
+function OrgCenterAutoSync({
+  isInitialized,
+  hosts,
+  keys,
+  customGroups,
+  updateHosts,
+  updateKeys,
+  updateCustomGroups,
+}: {
+  isInitialized: boolean;
+  hosts: Host[];
+  keys: SSHKey[];
+  customGroups: string[];
+  updateHosts: (hosts: Host[] | ((prev: Host[]) => Host[])) => void;
+  updateKeys: (keys: SSHKey[] | ((prev: SSHKey[]) => SSHKey[])) => void;
+  updateCustomGroups: (groups: string[] | ((prev: string[]) => string[])) => void;
+}) {
+  useOrgCenterState({
+    hosts,
+    keys,
+    customGroups,
+    updateHosts,
+    updateKeys,
+    updateCustomGroups,
+    autoSync: true,
+    isInitialized,
+  });
+  return null;
+}
 
 function vaultContextValuesEqual(
   prev: AppVaultContextValue,
@@ -194,6 +226,15 @@ export function VaultPublisher({ children }: VaultPublisherProps) {
 
   return (
     <AppVaultRuntimeContext.Provider value={vaultForApp}>
+      <OrgCenterAutoSync
+        isInitialized={isInitialized}
+        hosts={hosts}
+        keys={keys}
+        customGroups={customGroups}
+        updateHosts={updateHosts}
+        updateKeys={updateKeys}
+        updateCustomGroups={updateCustomGroups}
+      />
       {children}
     </AppVaultRuntimeContext.Provider>
   );

@@ -248,6 +248,9 @@ export interface Host {
   sftpFollowTerminalCwd?: boolean; // Overrides global SFTP follow-terminal-directory setting
   // Managed source: if this host is managed by an external file (e.g., ~/.ssh/config)
   managedSourceId?: string; // Reference to ManagedSource.id
+  // Organization center that published this host. Distinct from managedSourceId
+  // so SSH-config export does not treat catalog hosts as ~/.ssh/config entries.
+  orgCenterId?: string;
   // Host-level keyword highlighting (overrides/extends global settings)
   keywordHighlightRules?: KeywordHighlightRule[];
   keywordHighlightEnabled?: boolean;

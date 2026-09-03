@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
+import { DEFAULT_UI_LOCALE } from '../../infrastructure/config/i18n';
 import type { UILanguage } from '../../domain/models/connection';
 import type { HotkeyScheme } from '../../domain/models/keyBindings';
 import type { DynamicTabTitleMode } from '../../domain/models/terminal';
@@ -53,7 +54,7 @@ export const DEFAULT_SETTINGS_CHROME_SNAPSHOT: SettingsChromeSnapshot = Object.f
   resolvedTheme: 'dark',
   lightUiThemeId: 'default',
   darkUiThemeId: 'default',
-  uiLanguage: 'en',
+  uiLanguage: DEFAULT_UI_LOCALE,
   windowOpacity: 1,
   showSftpTab: true,
   showHostTreeSidebar: true,

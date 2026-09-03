@@ -37,7 +37,7 @@ let appContentWindowClosedHandler = null;
 let lastFocusedMainWindow = null;
 let settingsWindow = null;
 let currentTheme = "light";
-let currentLanguage = "en";
+let currentLanguage = "zh-CN";
 let currentWindowOpacity = 1;
 let cachedNativeTheme = null;
 
@@ -1181,7 +1181,7 @@ function registerWindowHandlers(ipcMain, nativeTheme) {
   });
 
   ipcMain.handle("netcatty:setLanguage", (_event, language) => {
-    currentLanguage = typeof language === "string" && language.length ? language : "en";
+    currentLanguage = typeof language === "string" && language.length ? language : "zh-CN";
     rebuildApplicationMenu();
     broadcastLanguageChanged();
     return true;
