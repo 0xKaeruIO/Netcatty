@@ -2,9 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import en from "../../application/i18n/locales/en.ts";
-import ru from "../../application/i18n/locales/ru.ts";
-import es from "../../application/i18n/locales/es.ts";
 import zhCN from "../../application/i18n/locales/zh-CN.ts";
+import zhTW from "../../application/i18n/locales/zh-TW.ts";
 import { markMiddleClickContextMenuEvent } from "./runtime/middleClickBehavior.ts";
 import * as terminalContextMenu from "./TerminalContextMenu.tsx";
 import { shouldEnableYmodemAction } from "./TerminalView.tsx";
@@ -113,7 +112,7 @@ test("shows upload clipboard image context menu action when a handler exists", (
 });
 
 test("localizes the upload clipboard image context menu label", () => {
-  const locales = { en, ru, es, "zh-CN": zhCN };
+  const locales = { en, "zh-CN": zhCN, "zh-TW": zhTW };
   const keys = [
     "terminal.menu.uploadClipboardImage",
     "terminal.clipboardImageUpload.noImage",
@@ -134,7 +133,7 @@ test("localizes the upload clipboard image context menu label", () => {
 
   assert.equal(en["terminal.menu.uploadClipboardImage"], "Upload clipboard image");
   assert.equal(zhCN["terminal.menu.uploadClipboardImage"], "上传剪贴板图片");
-  assert.equal(ru["terminal.menu.uploadClipboardImage"], "Загрузить изображение из буфера");
+  assert.equal(zhTW["terminal.menu.uploadClipboardImage"], "上傳剪貼簿圖片");
 });
 
 test("localizes the YMODEM serial send actions", () => {

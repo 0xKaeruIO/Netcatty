@@ -172,6 +172,7 @@ function createSystemManagerBridge(deps) {
     getSessions,
     execOnEtSession,
     ensureMoshStatsConnection,
+    getServerStats: getServerStatsFromSsh,
     process,
   } = deps;
 
@@ -485,64 +486,89 @@ function createSystemManagerBridge(deps) {
     return serviceOps.serviceAction(event, payload);
   }
 
-  function registerWorkerHandle(ipcMain, terminalWorkerManager, channel) {
-    ipcMain.handle(channel, (event, payload) => terminalWorkerManager.request(channel, payload, {
-      webContentsId: event?.sender?.id,
-    }));
+  async function getServerStats(event, payload) {
+    if (typeof getServerStatsFromSsh !== "function") {
+      return { success: false, error: "Session not found or not connected" };
+    }
+    return getServerStatsFromSsh(event, payload);
+  }
+
+  const localSystemHandlers = {
+    "netcatty:system:probeCapabilities": probeCapabilities,
+    "netcatty:system:getServerStats": getServerStats,
+    "netcatty:system:listProcesses": listProcesses,
+    "netcatty:system:signalProcess": signalProcess,
+    "netcatty:system:setupOsc7Tracking": setupOsc7Tracking,
+    "netcatty:system:listTmuxSessions": listTmuxSessions,
+    "netcatty:system:createTmuxSession": createTmuxSession,
+    "netcatty:system:listTmuxWindows": listTmuxWindows,
+    "netcatty:system:listTmuxPanes": listTmuxPanes,
+    "netcatty:system:listTmuxClients": listTmuxClients,
+    "netcatty:system:tmuxAction": tmuxAction,
+    "netcatty:system:listDockerContainers": listDockerContainers,
+    "netcatty:system:listDockerImages": listDockerImages,
+    "netcatty:system:dockerStats": dockerStats,
+    "netcatty:system:dockerInspect": dockerInspect,
+    "netcatty:system:dockerImageInspect": dockerImageInspect,
+    "netcatty:system:dockerAction": dockerAction,
+    "netcatty:system:dockerImageAction": dockerImageAction,
+    "netcatty:system:listAccelerators": listAccelerators,
+    "netcatty:system:listListeningPorts": listListeningPorts,
+    "netcatty:system:listSystemServices": listSystemServices,
+    "netcatty:system:systemServiceAction": systemServiceAction,
+  };
+
+  function resolveSystemSessionId(payload) {
+    if (typeof payload === "string") return payload;
+    return payload?.sessionId;
+  }
+
+  async function invokeGuestSystemRpcIfNeeded(sessionId, channel, payload) {
+    if (!sessionId) return null;
+    let tryInvoke;
+    try {
+      tryInvoke = require("./orgCenterShareBridge.cjs").tryInvokeOrgShareGuestSystemRpc;
+    } catch {
+      return null;
+    }
+    if (typeof tryInvoke !== "function") return null;
+    try {
+      return await tryInvoke(sessionId, channel, payload);
+    } catch (err) {
+      return { success: false, error: err?.message || String(err) };
+    }
+  }
+
+  function registerSystemIpcHandler(ipcMain, channel, handler) {
+    ipcMain.handle(channel, async (event, payload) => {
+      const guestResult = await invokeGuestSystemRpcIfNeeded(
+        resolveSystemSessionId(payload),
+        channel,
+        payload,
+      );
+      if (guestResult != null) return guestResult;
+      return handler(event, payload);
+    });
   }
 
   function registerHandlers(ipcMain, options = {}) {
     const terminalWorkerManager = options.terminalWorkerManager || null;
     if (terminalWorkerManager) {
-      [
-        "netcatty:system:probeCapabilities",
-        "netcatty:system:listProcesses",
-        "netcatty:system:signalProcess",
-        "netcatty:system:setupOsc7Tracking",
-        "netcatty:system:listTmuxSessions",
-        "netcatty:system:createTmuxSession",
-        "netcatty:system:listTmuxWindows",
-        "netcatty:system:listTmuxPanes",
-        "netcatty:system:listTmuxClients",
-        "netcatty:system:tmuxAction",
-        "netcatty:system:listDockerContainers",
-        "netcatty:system:listDockerImages",
-        "netcatty:system:dockerStats",
-        "netcatty:system:dockerInspect",
-        "netcatty:system:dockerImageInspect",
-        "netcatty:system:dockerAction",
-        "netcatty:system:dockerImageAction",
-        "netcatty:system:listAccelerators",
-        "netcatty:system:listListeningPorts",
-        "netcatty:system:listSystemServices",
-        "netcatty:system:systemServiceAction",
-      ].forEach((channel) => registerWorkerHandle(ipcMain, terminalWorkerManager, channel));
+      for (const channel of Object.keys(localSystemHandlers)) {
+        registerSystemIpcHandler(ipcMain, channel, (event, payload) => (
+          terminalWorkerManager.request(channel, payload, {
+            webContentsId: event?.sender?.id,
+          })
+        ));
+      }
       return;
     }
-    ipcMain.handle("netcatty:system:probeCapabilities", probeCapabilities);
-    ipcMain.handle("netcatty:system:listProcesses", listProcesses);
-    ipcMain.handle("netcatty:system:signalProcess", signalProcess);
-    ipcMain.handle("netcatty:system:setupOsc7Tracking", setupOsc7Tracking);
-    ipcMain.handle("netcatty:system:listTmuxSessions", listTmuxSessions);
-    ipcMain.handle("netcatty:system:createTmuxSession", createTmuxSession);
-    ipcMain.handle("netcatty:system:listTmuxWindows", listTmuxWindows);
-    ipcMain.handle("netcatty:system:listTmuxPanes", listTmuxPanes);
-    ipcMain.handle("netcatty:system:listTmuxClients", listTmuxClients);
-    ipcMain.handle("netcatty:system:tmuxAction", tmuxAction);
-    ipcMain.handle("netcatty:system:listDockerContainers", listDockerContainers);
-    ipcMain.handle("netcatty:system:listDockerImages", listDockerImages);
-    ipcMain.handle("netcatty:system:dockerStats", dockerStats);
-    ipcMain.handle("netcatty:system:dockerInspect", dockerInspect);
-    ipcMain.handle("netcatty:system:dockerImageInspect", dockerImageInspect);
-    ipcMain.handle("netcatty:system:dockerAction", dockerAction);
-    ipcMain.handle("netcatty:system:dockerImageAction", dockerImageAction);
-    ipcMain.handle("netcatty:system:listAccelerators", listAccelerators);
-    ipcMain.handle("netcatty:system:listListeningPorts", listListeningPorts);
-    ipcMain.handle("netcatty:system:listSystemServices", listSystemServices);
-    ipcMain.handle("netcatty:system:systemServiceAction", systemServiceAction);
+    for (const [channel, handler] of Object.entries(localSystemHandlers)) {
+      registerSystemIpcHandler(ipcMain, channel, handler);
+    }
   }
 
-  return { registerHandlers, probeCapabilities, listProcesses, signalProcess, setupOsc7Tracking };
+  return { registerHandlers, probeCapabilities, listProcesses, signalProcess, setupOsc7Tracking, getServerStats };
 }
 
 module.exports = { createSystemManagerBridge };

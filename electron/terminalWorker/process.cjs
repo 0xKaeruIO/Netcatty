@@ -343,6 +343,7 @@ function main() {
         getSessions: () => sessions,
         execOnEtSession: (...args) => terminalBridge.execOnEtSession(...args),
         ensureMoshStatsConnection: (...args) => sshBridge.ensureMoshStatsConnection(...args),
+        getServerStats: (...args) => sshBridge.getServerStats(...args),
         process,
       }).registerHandlers(ipcMain);
       ipcMain.on("netcatty:zmodem:cancel", (_event, payload) => {

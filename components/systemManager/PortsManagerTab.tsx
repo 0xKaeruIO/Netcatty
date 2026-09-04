@@ -1,6 +1,7 @@
 import { Network, Skull } from 'lucide-react';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
+import { formatSystemManagerError } from '../../domain/systemManager/errorMessage';
 import type { useSystemManagerBackend } from '../../application/state/useSystemManagerBackend';
 import { usePolling, useStableTranslate } from '../../application/state/useSystemManager';
 import { listeningPortInfoEqual } from '../../domain/systemManager/pollEquals';
@@ -136,7 +137,7 @@ export const PortsManagerTab = memo(function PortsManagerTab({
         return;
       }
       if (!result.success) {
-        setActionError(result.error || t('systemManager.errors.actionFailed'));
+        setActionError(formatSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t));
         return;
       }
       void refresh();

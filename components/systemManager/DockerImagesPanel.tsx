@@ -1,6 +1,7 @@
 import { Layers, Loader2, Tag, Trash2 } from 'lucide-react';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
+import { formatSystemManagerError } from '../../domain/systemManager/errorMessage';
 import type { useSystemManagerBackend } from '../../application/state/useSystemManagerBackend';
 import { dockerImageRowKey, type DockerImageInfo } from '../../domain/systemManager/types';
 import { dockerImageInfoEqual } from '../../domain/systemManager/pollEquals';
@@ -192,7 +193,7 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
       });
       if (actionGenerationRef.current !== actionGeneration) return;
       if (!result.success) {
-        showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
+        showSystemManagerError(formatSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t), t('common.error'));
         return;
       }
       if (selectedId === dockerImageRowKey(image)) {
@@ -219,7 +220,7 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
       const result = await backend.dockerImageAction({ sessionId, action: 'prune', all });
       if (actionGenerationRef.current !== actionGeneration) return;
       if (!result.success) {
-        showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
+        showSystemManagerError(formatSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t), t('common.error'));
         return;
       }
       await refresh();
@@ -243,7 +244,7 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
       tag: tag || 'latest',
     });
     if (!result.success) {
-      showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
+      showSystemManagerError(formatSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t), t('common.error'));
       return;
     }
     await refresh();

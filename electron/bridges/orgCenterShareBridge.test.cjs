@@ -183,3 +183,176 @@ test("guest exec does not fall through when the share socket is closed", async (
     bindShareRuntime(null);
   }
 });
+
+test("guest system rpc is a no-op for ordinary ssh sessions", () => {
+  const {
+    bindShareRuntime,
+    tryInvokeOrgShareGuestSystemRpc,
+  } = require("./orgCenterShareBridge.cjs");
+  bindShareRuntime({ guestShares: new Map() });
+  try {
+    assert.equal(
+      tryInvokeOrgShareGuestSystemRpc("ssh-1", "netcatty:system:listProcesses", { sessionId: "ssh-1" }),
+      null,
+    );
+  } finally {
+    bindShareRuntime(null);
+  }
+});
+
+test("guest system rpc rejects write actions without sending a share frame", async () => {
+  const {
+    bindShareRuntime,
+    tryInvokeOrgShareGuestSystemRpc,
+  } = require("./orgCenterShareBridge.cjs");
+  const sent = [];
+  bindShareRuntime({
+    guestShares: new Map([["guest-1", {
+      ws: {
+        readyState: WebSocket.OPEN,
+        send(raw) { sent.push(JSON.parse(raw)); },
+      },
+    }]]),
+  });
+  try {
+    const result = await tryInvokeOrgShareGuestSystemRpc(
+      "guest-1",
+      "netcatty:system:signalProcess",
+      { sessionId: "guest-1", pid: 1 },
+    );
+    assert.equal(result.success, false);
+    assert.match(result.error, /read-only/i);
+    assert.equal(result.errorCode, "ORG_SHARE_SYSTEM_READ_ONLY");
+    assert.deepEqual(sent, []);
+  } finally {
+    bindShareRuntime(null);
+  }
+});
+
+test("guest system rpc waits for a host result frame", async () => {
+  const {
+    applyGuestSystemRpcResult,
+    bindShareRuntime,
+    tryInvokeOrgShareGuestSystemRpc,
+  } = require("./orgCenterShareBridge.cjs");
+  const sent = [];
+  const share = {
+    ws: {
+      readyState: WebSocket.OPEN,
+      send(raw) { sent.push(JSON.parse(raw)); },
+    },
+  };
+  bindShareRuntime({ guestShares: new Map([["guest-1", share]]) });
+  try {
+    const pending = tryInvokeOrgShareGuestSystemRpc(
+      "guest-1",
+      "netcatty:system:listProcesses",
+      { sessionId: "guest-1" },
+    );
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, "sys-rpc");
+    assert.equal(sent[0].channel, "netcatty:system:listProcesses");
+    applyGuestSystemRpcResult(share, {
+      requestId: sent[0].requestId,
+      result: { success: true, processes: [{ pid: 1 }] },
+    });
+    const result = await pending;
+    assert.equal(result.success, true);
+    assert.equal(result.processes[0].pid, 1);
+  } finally {
+    bindShareRuntime(null);
+  }
+});
+
+test("host system rpc rewrites the guest session id onto the host ssh session", async () => {
+  const {
+    respondToGuestSystemRpc,
+    rewriteOrgShareSystemPayload,
+  } = require("./orgCenterShareBridge.cjs");
+  assert.equal(rewriteOrgShareSystemPayload("guest-1", "host-1"), "host-1");
+  assert.deepEqual(
+    rewriteOrgShareSystemPayload({ sessionId: "guest-1", pid: 9 }, "host-1"),
+    { sessionId: "host-1", pid: 9 },
+  );
+
+  const sent = [];
+  const invoked = [];
+  const share = {
+    sessionId: "host-1",
+    ws: {
+      readyState: WebSocket.OPEN,
+      send(raw) { sent.push(JSON.parse(raw)); },
+    },
+  };
+  await respondToGuestSystemRpc(share, {
+    requestId: "r1",
+    channel: "netcatty:system:listProcesses",
+    payload: { sessionId: "guest-1" },
+  }, async (sessionId, channel, payload) => {
+    invoked.push({ sessionId, channel, payload });
+    return { success: true, processes: [] };
+  });
+  assert.deepEqual(invoked, [{
+    sessionId: "host-1",
+    channel: "netcatty:system:listProcesses",
+    payload: { sessionId: "host-1" },
+  }]);
+  assert.equal(sent[0].type, "sys-rpc-result");
+  assert.equal(sent[0].requestId, "r1");
+  assert.equal(sent[0].result.success, true);
+});
+
+test("host system rpc relays overview stats onto the host ssh session", async () => {
+  const { respondToGuestSystemRpc } = require("./orgCenterShareBridge.cjs");
+  const sent = [];
+  const invoked = [];
+  const share = {
+    sessionId: "host-1",
+    ws: {
+      readyState: WebSocket.OPEN,
+      send(raw) { sent.push(JSON.parse(raw)); },
+    },
+  };
+  await respondToGuestSystemRpc(share, {
+    requestId: "r-stats",
+    channel: "netcatty:system:getServerStats",
+    payload: { sessionId: "guest-1" },
+  }, async (sessionId, channel, payload) => {
+    invoked.push({ sessionId, channel, payload });
+    return { success: true, stats: { cpu: 4 } };
+  });
+  assert.deepEqual(invoked, [{
+    sessionId: "host-1",
+    channel: "netcatty:system:getServerStats",
+    payload: { sessionId: "host-1" },
+  }]);
+  assert.equal(sent[0].type, "sys-rpc-result");
+  assert.equal(sent[0].requestId, "r-stats");
+  assert.equal(sent[0].result.stats.cpu, 4);
+});
+
+test("host system rpc does not relay oversized snapshots", async () => {
+  const { respondToGuestSystemRpc } = require("./orgCenterShareBridge.cjs");
+  const sent = [];
+  const share = {
+    sessionId: "host-1",
+    ws: {
+      readyState: WebSocket.OPEN,
+      send(raw) { sent.push(JSON.parse(raw)); },
+    },
+  };
+  await respondToGuestSystemRpc(share, {
+    requestId: "r-big",
+    channel: "netcatty:system:listProcesses",
+    payload: { sessionId: "guest-1" },
+  }, async () => ({
+    success: true,
+    processes: Array.from({ length: 20000 }, (_, i) => ({
+      pid: i + 1,
+      command: "x".repeat(80),
+    })),
+  }));
+  assert.equal(sent[0].type, "sys-rpc-result");
+  assert.equal(sent[0].result.success, false);
+  assert.match(sent[0].result.error, /too large/i);
+});

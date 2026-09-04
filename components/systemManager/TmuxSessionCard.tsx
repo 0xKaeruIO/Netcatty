@@ -3,6 +3,7 @@ import {
 } from 'lucide-react';
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
+import { formatSystemManagerError } from '../../domain/systemManager/errorMessage';
 import type { useSystemManagerBackend } from '../../application/state/useSystemManagerBackend';
 import { buildTmuxAttachCommand } from '../../domain/systemManager/tmuxShell';
 import type {
@@ -141,7 +142,7 @@ export const TmuxSessionCard = memo(function TmuxSessionCard({
       });
       if (!result.success) throw new Error(result.error || t('systemManager.errors.actionFailed'));
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('systemManager.errors.actionFailed'));
+      setActionError(formatSystemManagerError(err, t));
     } finally {
       setBusy(false);
       setPending(null);

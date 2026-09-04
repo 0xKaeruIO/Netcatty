@@ -3,9 +3,8 @@ import test from "node:test";
 
 import type { PortForwardingRule } from "../domain/models";
 import en from "../application/i18n/locales/en";
-import es from "../application/i18n/locales/es";
 import zhCN from "../application/i18n/locales/zh-CN";
-import ru from "../application/i18n/locales/ru";
+import zhTW from "../application/i18n/locales/zh-TW";
 import { buildRuleSummary, stopRuntimeTunnelBeforeDelete } from "./port-forwarding/utils";
 
 const interpolate = (template: string, vars?: Record<string, unknown>) =>
@@ -46,7 +45,7 @@ test("buildRuleSummary describes local, remote, and dynamic forwarding direction
 });
 
 test("bundled locales include port forwarding summary copy for every forwarding type", () => {
-  for (const [locale, messages] of Object.entries({ en, es, zhCN, ru })) {
+  for (const [locale, messages] of Object.entries({ en, zhCN, zhTW })) {
     for (const key of [
       "pf.rule.summary.local",
       "pf.rule.summary.remote",

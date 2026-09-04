@@ -1423,8 +1423,24 @@ const {
 /**
  * Register IPC handlers for SSH operations
  */
+async function invokeGuestSystemRpcIfNeeded(channel, payload) {
+  const sessionId = typeof payload === "string" ? payload : payload?.sessionId;
+  if (!sessionId) return null;
+  try {
+    const { tryInvokeOrgShareGuestSystemRpc } = require("./orgCenterShareBridge.cjs");
+    if (typeof tryInvokeOrgShareGuestSystemRpc !== "function") return null;
+    return await tryInvokeOrgShareGuestSystemRpc(sessionId, channel, payload);
+  } catch (err) {
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
 function registerWorkerHandle(ipcMain, terminalWorkerManager, channel) {
   ipcMain.handle(channel, async (event, payload) => {
+    if (channel === "netcatty:ssh:stats") {
+      const guestResult = await invokeGuestSystemRpcIfNeeded(channel, payload);
+      if (guestResult != null) return guestResult;
+    }
     // SSH sessions run in utilityProcess; UDP-probe LAN access from the main
     // process first so macOS can show the Local Network privacy alert for
     // the Netcatty app bundle instead of silently denying the helper
@@ -1503,7 +1519,11 @@ function registerHandlers(ipcMain, options = {}) {
     ipcMain.handle("netcatty:ssh:distroInfo", getSessionDistroInfo);
     ipcMain.handle("netcatty:ssh:readRemoteHistory", readRemoteHistory);
     ipcMain.handle("netcatty:ssh:listdir", listSessionDir);
-    ipcMain.handle("netcatty:ssh:stats", getServerStats);
+    ipcMain.handle("netcatty:ssh:stats", async (event, payload) => {
+      const guestResult = await invokeGuestSystemRpcIfNeeded("netcatty:ssh:stats", payload);
+      if (guestResult != null) return guestResult;
+      return getServerStats(event, payload);
+    });
     ipcMain.handle("netcatty:ssh:setEncoding", setSessionEncoding);
     ipcMain.on("netcatty:zmodem:overwrite-response", (_event, payload) => {
       const resolve = zmodemOverwritePending.get(payload?.requestId);
@@ -1555,6 +1575,7 @@ function registerHandlers(ipcMain, options = {}) {
 module.exports = {
   init,
   registerHandlers,
+  getServerStats,
   connectThroughChain,
   buildAlgorithms,
   _resetAlgorithmSupportCacheForTests,

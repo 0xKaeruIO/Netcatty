@@ -10,8 +10,33 @@ const GUEST_EXEC_MAX_OUTPUT = 1024 * 1024;
 const GUEST_EXEC_DEFAULT_TIMEOUT_MS = 60000;
 const GUEST_BACKGROUND_JOB_ERROR =
   "Shared guest sessions do not support background jobs. Use terminal_execute.";
+const ORG_SHARE_GUEST_SYSTEM_WRITE_ERROR_CODE = "ORG_SHARE_SYSTEM_READ_ONLY";
+const ORG_SHARE_GUEST_SYSTEM_WRITE_ERROR =
+  "System monitoring is read-only on shared guest sessions.";
+const GUEST_SYS_RPC_TIMEOUT_MS = 45000;
+const GUEST_SYS_RPC_MAX_RESULT_BYTES = 900 * 1024;
+const ORG_SHARE_SYSTEM_READ_CHANNELS = new Set([
+  "netcatty:system:probeCapabilities",
+  "netcatty:system:listProcesses",
+  "netcatty:system:listTmuxSessions",
+  "netcatty:system:listTmuxWindows",
+  "netcatty:system:listTmuxPanes",
+  "netcatty:system:listTmuxClients",
+  "netcatty:system:listDockerContainers",
+  "netcatty:system:listDockerImages",
+  "netcatty:system:dockerStats",
+  "netcatty:system:dockerInspect",
+  "netcatty:system:dockerImageInspect",
+  "netcatty:system:listAccelerators",
+  "netcatty:system:listListeningPorts",
+  "netcatty:system:listSystemServices",
+  "netcatty:system:getServerStats",
+  "netcatty:ssh:stats",
+]);
 
 let liveShareRuntime = null;
+let invokeSystemOnHostSession = null;
+let sysRpcSeq = 0;
 
 function normalizeBaseUrl(raw) {
   const trimmed = String(raw ?? "").trim().replace(/\/+$/, "");
@@ -240,6 +265,14 @@ function emitGuestOutput(share, text) {
   }
 }
 
+function guestSystemWriteDeniedResult() {
+  return {
+    success: false,
+    error: ORG_SHARE_GUEST_SYSTEM_WRITE_ERROR,
+    errorCode: ORG_SHARE_GUEST_SYSTEM_WRITE_ERROR_CODE,
+  };
+}
+
 function abortGuestShareExecs(share, reason) {
   const closers = [...(share?.closeListeners || [])];
   share?.closeListeners?.clear();
@@ -249,6 +282,125 @@ function abortGuestShareExecs(share, reason) {
     } catch (err) {
       console.error("[orgCenterShare] guest exec abort failed", err);
     }
+  }
+  abortGuestSystemRpcs(share, reason);
+}
+
+function nextSysRpcRequestId() {
+  sysRpcSeq += 1;
+  return `sys-rpc-${Date.now()}-${sysRpcSeq}`;
+}
+
+function rewriteOrgShareSystemPayload(payload, hostSessionId) {
+  if (typeof payload === "string") return hostSessionId;
+  return {
+    ...(payload && typeof payload === "object" ? payload : {}),
+    sessionId: hostSessionId,
+  };
+}
+
+function abortGuestSystemRpcs(share, reason) {
+  const pending = share?.sysRpcPending;
+  if (!pending || pending.size === 0) return;
+  share.sysRpcPending = new Map();
+  const error = reason || "Shared session disconnected.";
+  for (const entry of pending.values()) {
+    clearTimeout(entry.timer);
+    try {
+      entry.resolve({ success: false, error });
+    } catch (err) {
+      console.error("[orgCenterShare] guest system rpc abort failed", err);
+    }
+  }
+}
+
+function applyGuestSystemRpcResult(share, message) {
+  const requestId = String(message?.requestId || "");
+  const pending = share?.sysRpcPending?.get(requestId);
+  if (!pending) return false;
+  share.sysRpcPending.delete(requestId);
+  clearTimeout(pending.timer);
+  pending.resolve(
+    message?.result && typeof message.result === "object"
+      ? message.result
+      : { success: false, error: "Empty system result." },
+  );
+  return true;
+}
+
+function invokeOrgShareGuestSystemRpc(sessionId, channel, payload) {
+  const share = liveShareRuntime?.guestShares?.get(String(sessionId || ""));
+  if (!share) {
+    return Promise.resolve({ success: false, error: "Shared session is not connected." });
+  }
+  if (!share.ws || share.ws.readyState !== WebSocket.OPEN) {
+    return Promise.resolve({ success: false, error: "Shared session is not connected." });
+  }
+  if (!ORG_SHARE_SYSTEM_READ_CHANNELS.has(channel)) {
+    return Promise.resolve(guestSystemWriteDeniedResult());
+  }
+  if (!share.sysRpcPending) share.sysRpcPending = new Map();
+  const requestId = nextSysRpcRequestId();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      share.sysRpcPending?.delete(requestId);
+      resolve({ success: false, error: "System monitoring request timed out." });
+    }, GUEST_SYS_RPC_TIMEOUT_MS);
+    share.sysRpcPending.set(requestId, { resolve, timer });
+    sendJson(share.ws, { type: "sys-rpc", requestId, channel, payload });
+  });
+}
+
+function tryInvokeOrgShareGuestSystemRpc(sessionId, channel, payload) {
+  if (!hasOrgShareGuestSession(sessionId)) return null;
+  return invokeOrgShareGuestSystemRpc(sessionId, channel, payload);
+}
+
+async function respondToGuestSystemRpc(share, message, invokeSystem) {
+  const requestId = String(message?.requestId || "");
+  if (!requestId) return;
+  const channel = String(message?.channel || "");
+  const sendResult = (result) => {
+    const message = { type: "sys-rpc-result", requestId, result };
+    try {
+      const encoded = JSON.stringify(message);
+      if (Buffer.byteLength(encoded, "utf8") > GUEST_SYS_RPC_MAX_RESULT_BYTES) {
+        sendJson(share?.ws, {
+          type: "sys-rpc-result",
+          requestId,
+          result: { success: false, error: "System snapshot is too large to relay." },
+        });
+        return;
+      }
+    } catch (err) {
+      sendJson(share?.ws, {
+        type: "sys-rpc-result",
+        requestId,
+        result: { success: false, error: err?.message || String(err) },
+      });
+      return;
+    }
+    sendJson(share?.ws, message);
+  };
+  if (!ORG_SHARE_SYSTEM_READ_CHANNELS.has(channel)) {
+    sendResult(guestSystemWriteDeniedResult());
+    return;
+  }
+  const hostSessionId = String(share?.sessionId || "");
+  if (!hostSessionId || typeof invokeSystem !== "function") {
+    sendResult({ success: false, error: "System monitoring is unavailable on the share host." });
+    return;
+  }
+  try {
+    const result = await invokeSystem(
+      hostSessionId,
+      channel,
+      rewriteOrgShareSystemPayload(message.payload, hostSessionId),
+      share.contents,
+    );
+    sendResult(result && typeof result === "object" ? result : { success: false, error: "Empty system result." });
+  } catch (err) {
+    sendResult({ success: false, error: err?.message || String(err) });
   }
 }
 
@@ -363,6 +515,9 @@ function registerHandlers(ipcMain, options = {}) {
   const hostShares = new Map();
   const guestShares = new Map();
   bindShareRuntime({ guestShares });
+  invokeSystemOnHostSession = typeof options.invokeSystemOnSession === "function"
+    ? options.invokeSystemOnSession
+    : null;
   let outputTapInstalled = false;
   let workerTapCleanup = null;
 
@@ -635,6 +790,10 @@ function registerHandlers(ipcMain, options = {}) {
         sendSnapshot();
         return;
       }
+      if (message?.type === "sys-rpc") {
+        void respondToGuestSystemRpc(share, message, invokeSystemOnHostSession);
+        return;
+      }
       if (message?.type === "ended" || message?.type === "error") {
         void stopHostShare(sessionId, message.type);
       }
@@ -720,6 +879,10 @@ function registerHandlers(ipcMain, options = {}) {
           cols: message.cols || joined.cols,
           rows: message.rows || joined.rows,
         });
+        return;
+      }
+      if (message?.type === "sys-rpc-result") {
+        applyGuestSystemRpcResult(share, message);
         return;
       }
       if (message?.type === "ended" || message?.type === "error") {
@@ -836,5 +999,12 @@ module.exports = {
   waitForGuestShareOutput,
   execOrgShareGuestCommand,
   tryExecOrgShareGuestCommand,
+  tryInvokeOrgShareGuestSystemRpc,
+  rewriteOrgShareSystemPayload,
+  respondToGuestSystemRpc,
+  applyGuestSystemRpcResult,
+  ORG_SHARE_SYSTEM_READ_CHANNELS,
+  ORG_SHARE_GUEST_SYSTEM_WRITE_ERROR,
+  ORG_SHARE_GUEST_SYSTEM_WRITE_ERROR_CODE,
   GUEST_BACKGROUND_JOB_ERROR,
 };

@@ -31,6 +31,8 @@ export const enSystemManagerMessages: Messages = {
   'systemManager.errors.loadPorts': 'Failed to load listening ports',
   'systemManager.errors.loadServices': 'Failed to load systemd services',
   'systemManager.errors.sshChannelUnavailable': 'The server refused to open a new execution channel. Try again later, or reconnect this host.',
+  'systemManager.errors.shareReadOnly': 'System monitoring is read-only on shared guest sessions.',
+  'systemManager.errors.sessionNotFound': 'Session not found or not connected.',
 
   'systemManager.overview.empty': 'No system overview data yet.',
   'systemManager.overview.loading': 'Loading system overview…',

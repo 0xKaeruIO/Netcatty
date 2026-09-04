@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { formatSystemManagerError } from '../../domain/systemManager/errorMessage';
 import { useI18n } from '../i18n/I18nProvider';
 import type { I18nContextValue } from '../i18n/I18nProvider';
 import { sessionCapabilitiesStore } from './sessionCapabilitiesStore';
@@ -13,12 +14,8 @@ function delay(ms: number): Promise<void> {
 }
 
 function normalizePollingErrorMessage(error: unknown, t: I18nContextValue['t']): string {
-  const message = error instanceof Error ? error.message : String(error || 'Unknown error');
-  const lower = message.toLowerCase();
-  if (lower.includes('channel open failure') || lower.includes('unable to exec')) {
-    return t('systemManager.errors.sshChannelUnavailable');
-  }
-  return message;
+  const formatted = formatSystemManagerError(error, t);
+  return formatted || String(error || 'Unknown error');
 }
 
 /** Stable i18n ref so polling fetchers do not reset when locale re-renders. */

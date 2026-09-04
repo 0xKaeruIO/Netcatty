@@ -3,6 +3,7 @@ import {
 } from 'lucide-react';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
+import { formatSystemManagerError } from '../../domain/systemManager/errorMessage';
 import type { useSystemManagerBackend } from '../../application/state/useSystemManagerBackend';
 import {
   getProcessFlags,
@@ -400,7 +401,7 @@ export const ProcessManagerTab = memo(function ProcessManagerTab({
     try {
       const result = await backend.signalSystemProcess({ sessionId, pid, signal });
       if (!result.success) {
-        setActionError(result.error || t('systemManager.errors.actionFailed'));
+        setActionError(formatSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t));
         return;
       }
       void refresh();
@@ -413,7 +414,7 @@ export const ProcessManagerTab = memo(function ProcessManagerTab({
     setActionError(null);
     const result = await backend.signalSystemProcess({ sessionId, pid, nice });
     if (!result.success) {
-      setActionError(result.error || t('systemManager.errors.actionFailed'));
+      setActionError(formatSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t));
       return;
     }
     void refresh();

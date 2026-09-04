@@ -1735,10 +1735,10 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     handleSwitchSidePanelTab('ai');
   }, [handleSwitchSidePanelTab]);
 
+  // Monitoring uses a separate SSH exec channel, not the shared PTY.
   const handleOpenSystem = useCallback(() => {
-    if (rejectOrgShareSidePanelWrite()) return;
     handleSwitchSidePanelTab('system');
-  }, [handleSwitchSidePanelTab, rejectOrgShareSidePanelWrite]);
+  }, [handleSwitchSidePanelTab]);
 
   const handleOpenNotes = useCallback(() => {
     const tabId = activeTabIdRef.current;

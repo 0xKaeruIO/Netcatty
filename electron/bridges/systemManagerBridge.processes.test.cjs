@@ -443,3 +443,19 @@ test("signalProcess rejects Windows-only STOP/CONT on local win32 sessions", asy
   assert.equal(result.success, false);
   assert.match(result.error, /not supported on Windows/i);
 });
+
+test("getServerStats delegates to the ssh stats collector", async () => {
+  const bridge = createSystemManagerBridge({
+    getSessions: () => new Map(),
+    process,
+    getServerStats: async (_event, payload) => ({
+      success: true,
+      stats: { cpu: 9, sessionId: payload.sessionId },
+    }),
+  });
+
+  const result = await bridge.getServerStats(null, { sessionId: "s1" });
+  assert.equal(result.success, true);
+  assert.equal(result.stats.cpu, 9);
+  assert.equal(result.stats.sessionId, "s1");
+});

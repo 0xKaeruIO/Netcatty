@@ -1,6 +1,7 @@
 import { Box, FileText, Play, RotateCcw, Square, Terminal } from 'lucide-react';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
+import { formatSystemManagerError } from '../../domain/systemManager/errorMessage';
 import type { useSystemManagerBackend } from '../../application/state/useSystemManagerBackend';
 import { writeSystemManagerDiagnostic } from '../../application/state/systemManagerDiagnostics';
 import type { TerminalSession } from '../../types';
@@ -307,7 +308,7 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
     try {
       const result = await backend.dockerAction({ sessionId, containerId, action, newName });
       if (!result.success) {
-        showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
+        showSystemManagerError(formatSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t), t('common.error'));
         return;
       }
       const affectedContainer = (containers ?? []).find((container) => (
@@ -370,7 +371,7 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
         containerName: container.name,
         error: result.error,
       });
-      showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
+      showSystemManagerError(formatSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t), t('common.error'));
     }
   }, [backend, parentSession, sessionId, t]);
 
@@ -397,7 +398,7 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
         containerName: container.name,
         error: result.error,
       });
-      showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
+      showSystemManagerError(formatSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t), t('common.error'));
     }
   }, [backend, parentSession, sessionId, t]);
 

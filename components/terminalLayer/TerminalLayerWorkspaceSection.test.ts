@@ -159,3 +159,19 @@ test("workspace section passes resolved session host ids to terminal panes", () 
 
   assert.equal(sawResolvedIds, true);
 });
+
+test("relay share does not block opening system monitoring", () => {
+  const source = readFileSync(new URL("../TerminalLayer.tsx", import.meta.url), "utf8");
+  assert.match(
+    source,
+    /const handleOpenSystem = useCallback\(\(\) => \{\s+handleSwitchSidePanelTab\('system'\);/,
+  );
+  assert.match(
+    source,
+    /if \(rejectOrgShareSidePanelWrite\(\)\) return;\s+handleSwitchSidePanelTab\('sftp'\);/,
+  );
+  assert.match(
+    source,
+    /if \(rejectOrgShareSidePanelWrite\(\)\) return;\s+handleSwitchSidePanelTab\('scripts'\);/,
+  );
+});

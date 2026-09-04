@@ -380,7 +380,7 @@ function createPreloadApi(ctx) {
     return ipcRenderer.invoke("netcatty:ssh:distroInfo", { sessionId });
   },
   getServerStats: async (sessionId) => {
-    return ipcRenderer.invoke("netcatty:ssh:stats", { sessionId });
+    return ipcRenderer.invoke("netcatty:system:getServerStats", { sessionId });
   },
   probeSystemCapabilities: async (sessionId) => {
     return ipcRenderer.invoke("netcatty:system:probeCapabilities", { sessionId });

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
+import { formatSystemManagerError } from '../../domain/systemManager/errorMessage';
 import { aggregateMountedDiskUsage } from '../../domain/systemDiskUsage';
 import { cn } from '../../lib/utils';
 import { useServerStats } from '../../application/state/useServerStats';
@@ -229,6 +230,7 @@ export const SystemOverviewTab = memo(function SystemOverviewTab({
     isConnected: true,
   });
   const hasStats = Boolean(stats.lastUpdated);
+  const displayError = error ? formatSystemManagerError(error, t) : null;
 
   const memoryPercent = ratioPercent(stats?.memUsed, stats?.memTotal);
   const mountedDiskUsage = aggregateMountedDiskUsage(stats.disks);
@@ -270,23 +272,23 @@ export const SystemOverviewTab = memo(function SystemOverviewTab({
 
   // Prefer cached stats over empty/loading so tab switches never flash the
   // empty placeholder when we already have a successful sample.
-  const showBlockingError = Boolean(error && !hasStats && !loading);
+  const showBlockingError = Boolean(displayError && !hasStats && !loading);
   const showInitialLoading = Boolean(loading && !hasStats);
-  const showEmpty = Boolean(!hasStats && !loading && !error);
+  const showEmpty = Boolean(!hasStats && !loading && !displayError);
 
   return (
     <SystemPanelShell section="system-manager-overview">
-      {error && hasStats && !loading && (
+      {displayError && hasStats && !loading && (
         <SystemPanelInlineError
-          message={error}
+          message={displayError}
           onRetry={() => void refresh()}
           retryLabel={t('history.action.retry')}
           loading={loading}
         />
       )}
 
-      {showBlockingError && error ? (
-        <SystemPanelError message={error} onRetry={() => void refresh()} retryLabel={t('history.action.retry')} loading={loading} />
+      {showBlockingError && displayError ? (
+        <SystemPanelError message={displayError} onRetry={() => void refresh()} retryLabel={t('history.action.retry')} loading={loading} />
       ) : showInitialLoading ? (
         <SystemPanelLoading message={t('systemManager.overview.loading')} />
       ) : showEmpty ? (

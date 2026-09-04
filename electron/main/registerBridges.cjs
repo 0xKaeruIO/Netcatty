@@ -484,6 +484,7 @@ function createBridgeRegistrar(context) {
       getSessions: () => sessions,
       execOnEtSession: (...args) => terminalBridge.execOnEtSession(...args),
       ensureMoshStatsConnection: (...args) => sshBridge.ensureMoshStatsConnection(...args),
+      getServerStats: (...args) => sshBridge.getServerStats(...args),
       process,
     });
     systemManagerBridge.registerHandlers(ipcMain, { terminalWorkerManager });
@@ -505,6 +506,17 @@ function createBridgeRegistrar(context) {
     orgCenterShareBridge.registerHandlers(ipcMain, {
       terminalWorkerManager,
       terminalBridge,
+      invokeSystemOnSession: async (sessionId, channel, payload, contents) => {
+        const nextPayload = typeof payload === "string"
+          ? sessionId
+          : { ...(payload && typeof payload === "object" ? payload : {}), sessionId };
+        if (!terminalWorkerManager?.request) {
+          return { success: false, error: "System monitoring is unavailable on the share host." };
+        }
+        return terminalWorkerManager.request(channel, nextPayload, {
+          webContentsId: contents?.id,
+        });
+      },
     });
     aiBridge.registerHandlers(ipcMain);
     httpNetworkProxyBridge.registerHandlers(ipcMain, electronModule);

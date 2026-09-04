@@ -31,6 +31,8 @@ export const zhCnSystemManagerMessages: Messages = {
   'systemManager.errors.loadPorts': '加载监听端口失败',
   'systemManager.errors.loadServices': '加载 systemd 服务失败',
   'systemManager.errors.sshChannelUnavailable': '服务器拒绝打开新的执行通道。请稍后重试，或重新连接当前主机。',
+  'systemManager.errors.shareReadOnly': '共享访客会话中，系统监控为只读。',
+  'systemManager.errors.sessionNotFound': '未找到会话或尚未连接。',
 
   'systemManager.overview.empty': '暂无系统概览数据。',
   'systemManager.overview.loading': '正在加载系统概览…',

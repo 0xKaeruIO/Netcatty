@@ -31,6 +31,8 @@ export const zhTwSystemManagerMessages: Messages = {
   'systemManager.errors.loadPorts': '載入監聽連接埠失敗',
   'systemManager.errors.loadServices': '載入 systemd 服務失敗',
   'systemManager.errors.sshChannelUnavailable': '伺服器拒絕開啟新的執行通道。請稍後重試，或重新連線目前主機。',
+  'systemManager.errors.shareReadOnly': '共享訪客工作階段中，系統監控為唯讀。',
+  'systemManager.errors.sessionNotFound': '找不到工作階段或尚未連線。',
 
   'systemManager.overview.empty': '暫無系統概覽資料。',
   'systemManager.overview.loading': '正在載入系統概覽…',

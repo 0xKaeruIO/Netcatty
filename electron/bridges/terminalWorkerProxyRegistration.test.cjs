@@ -360,3 +360,131 @@ test("terminal worker mode proxies system management requests", async () => {
     ],
   );
 });
+
+test("terminal worker mode keeps guest system monitoring on the share socket", async () => {
+  const {
+    applyGuestSystemRpcResult,
+    bindShareRuntime,
+  } = require("./orgCenterShareBridge.cjs");
+  const sent = [];
+  const share = {
+    ws: {
+      readyState: WebSocket.OPEN,
+      send(raw) { sent.push(JSON.parse(raw)); },
+    },
+  };
+  bindShareRuntime({ guestShares: new Map([["guest-1", share]]) });
+  try {
+    const ipcMain = createFakeIpcMain();
+    const terminalWorkerManager = createFakeWorkerManager();
+    const systemManagerBridge = createSystemManagerBridge({
+      getSessions: () => new Map(),
+      execOnEtSession: () => {},
+      ensureMoshStatsConnection: () => {},
+      process,
+    });
+    systemManagerBridge.registerHandlers(ipcMain, { terminalWorkerManager });
+
+    const pending = ipcMain.handlers.get("netcatty:system:listProcesses")(
+      fakeEvent,
+      { sessionId: "guest-1" },
+    );
+    assert.equal(terminalWorkerManager.requests.length, 0);
+    assert.equal(sent[0].type, "sys-rpc");
+    applyGuestSystemRpcResult(share, {
+      requestId: sent[0].requestId,
+      result: { success: true, processes: [] },
+    });
+    const result = await pending;
+    assert.equal(result.success, true);
+    assert.deepEqual(result.processes, []);
+    assert.deepEqual(terminalWorkerManager.requests, []);
+  } finally {
+    bindShareRuntime(null);
+  }
+});
+
+test("terminal worker mode relays guest overview stats through the system share channel", async () => {
+  const {
+    applyGuestSystemRpcResult,
+    bindShareRuntime,
+  } = require("./orgCenterShareBridge.cjs");
+  const sent = [];
+  const share = {
+    ws: {
+      readyState: WebSocket.OPEN,
+      send(raw) { sent.push(JSON.parse(raw)); },
+    },
+  };
+  bindShareRuntime({ guestShares: new Map([["guest-1", share]]) });
+  try {
+    const ipcMain = createFakeIpcMain();
+    const terminalWorkerManager = createFakeWorkerManager();
+    const systemManagerBridge = createSystemManagerBridge({
+      getSessions: () => new Map(),
+      execOnEtSession: () => {},
+      ensureMoshStatsConnection: () => {},
+      getServerStats: async () => ({ success: true, stats: { cpu: 1 } }),
+      process,
+    });
+    systemManagerBridge.registerHandlers(ipcMain, { terminalWorkerManager });
+
+    const pending = ipcMain.handlers.get("netcatty:system:getServerStats")(
+      fakeEvent,
+      { sessionId: "guest-1" },
+    );
+    assert.equal(terminalWorkerManager.requests.length, 0);
+    assert.equal(sent[0].type, "sys-rpc");
+    assert.equal(sent[0].channel, "netcatty:system:getServerStats");
+    applyGuestSystemRpcResult(share, {
+      requestId: sent[0].requestId,
+      result: { success: true, stats: { cpu: 12 } },
+    });
+    const result = await pending;
+    assert.equal(result.success, true);
+    assert.equal(result.stats.cpu, 12);
+    assert.deepEqual(terminalWorkerManager.requests, []);
+  } finally {
+    bindShareRuntime(null);
+  }
+});
+
+test("terminal worker mode relays guest overview stats through the share socket", async () => {
+  const {
+    applyGuestSystemRpcResult,
+    bindShareRuntime,
+  } = require("./orgCenterShareBridge.cjs");
+  const sent = [];
+  const share = {
+    ws: {
+      readyState: WebSocket.OPEN,
+      send(raw) { sent.push(JSON.parse(raw)); },
+    },
+  };
+  bindShareRuntime({ guestShares: new Map([["guest-1", share]]) });
+  try {
+    const ipcMain = createFakeIpcMain();
+    const terminalWorkerManager = createFakeWorkerManager();
+    sshBridge.registerHandlers(ipcMain, { terminalWorkerManager });
+
+    const pending = ipcMain.handlers.get("netcatty:ssh:stats")(
+      fakeEvent,
+      { sessionId: "guest-1" },
+    );
+    assert.equal(
+      terminalWorkerManager.requests.filter((entry) => entry.channel === "netcatty:ssh:stats").length,
+      0,
+    );
+    assert.equal(sent[0].type, "sys-rpc");
+    assert.equal(sent[0].channel, "netcatty:ssh:stats");
+    applyGuestSystemRpcResult(share, {
+      requestId: sent[0].requestId,
+      result: { success: true, stats: { cpu: 1 } },
+    });
+    const result = await pending;
+    assert.equal(result.success, true);
+    assert.equal(result.stats.cpu, 1);
+  } finally {
+    bindShareRuntime(null);
+  }
+});
