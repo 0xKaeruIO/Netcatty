@@ -791,11 +791,13 @@ export const SYNC_CONSTANTS = {
   MIN_SYNC_INTERVAL: 1,          // minutes
   MAX_SYNC_INTERVAL: 60,         // minutes
   
-  // OAuth
-  GITHUB_CLIENT_ID: readBuildEnv('VITE_SYNC_GITHUB_CLIENT_ID') || '', // Public client ID for Device Flow
-  GOOGLE_CLIENT_ID: readBuildEnv('VITE_SYNC_GOOGLE_CLIENT_ID') || '',
+  // OAuth public client IDs. CI may override via VITE_SYNC_* env vars; local
+  // packs without those secrets must still send a client_id or Microsoft
+  // returns AADSTS900144 and Google/GitHub auth also fail.
+  GITHUB_CLIENT_ID: readBuildEnv('VITE_SYNC_GITHUB_CLIENT_ID') || 'Ov23liuLdkw1H393rtT4',
+  GOOGLE_CLIENT_ID: readBuildEnv('VITE_SYNC_GOOGLE_CLIENT_ID') || '840441747394-n58o8ibgivgd3frqsn0bo5revf4viq2a.apps.googleusercontent.com',
   GOOGLE_CLIENT_SECRET: readBuildEnv('VITE_SYNC_GOOGLE_CLIENT_SECRET') || '',
-  ONEDRIVE_CLIENT_ID: readBuildEnv('VITE_SYNC_ONEDRIVE_CLIENT_ID') || '',
+  ONEDRIVE_CLIENT_ID: readBuildEnv('VITE_SYNC_ONEDRIVE_CLIENT_ID') || '138bb0b6-b919-4e9d-80c6-64136ffc02a3',
   
   // API endpoints
   GITHUB_DEVICE_CODE_URL: 'https://github.com/login/device/code',

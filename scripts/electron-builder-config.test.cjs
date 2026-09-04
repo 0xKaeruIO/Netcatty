@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
+const { readdirSync, readFileSync } = require("node:fs");
 const path = require("node:path");
 
 const config = require("../electron-builder.config.cjs");
@@ -31,13 +31,53 @@ test("build.files includes shared terminal flow constants for main process", () 
   );
 });
 
-test("build.files includes the prompt classifier required by Mosh", () => {
+test("build.files includes domain CommonJS modules required by the main process", () => {
   assert.ok(
-    config.files.includes("domain/terminalPromptSecurity.shared.cjs"),
-    "packaged Mosh bootstrap requires the shared prompt classifier",
+    config.files.includes("domain/**/*.cjs"),
+    "packaged main process requires domain/*.cjs (Mosh prompt classifier, Xshell decrypt)",
   );
   const promptSecurity = require("../domain/terminalPromptSecurity.shared.cjs");
   assert.equal(promptSecurity.isUntrustedTerminalInputPrompt("验证码："), true);
+  const xshellPassword = require("../domain/xshellPassword.shared.cjs");
+  assert.equal(typeof xshellPassword.decryptXshellPassword, "function");
+});
+
+test("electron main-process requires of domain/*.cjs stay covered by build.files", () => {
+  const electronDir = path.join(__dirname, "../electron");
+  const requiredBasenames = new Set();
+  const requireRe = /require\(\s*["']([^"']*domain\/[^"']+\.cjs)["']\s*\)/g;
+
+  function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!entry.name.endsWith(".cjs") || entry.name.includes(".test.")) continue;
+      const source = readFileSync(fullPath, "utf8");
+      requireRe.lastIndex = 0;
+      let match = requireRe.exec(source);
+      while (match) {
+        requiredBasenames.add(path.basename(match[1]));
+        match = requireRe.exec(source);
+      }
+    }
+  }
+
+  walk(electronDir);
+  assert.ok(
+    requiredBasenames.has("xshellPassword.shared.cjs"),
+    "xshellPassword.cjs requires domain/xshellPassword.shared.cjs at packaged startup",
+  );
+  assert.ok(
+    requiredBasenames.has("terminalPromptSecurity.shared.cjs"),
+    "moshSession.cjs requires domain/terminalPromptSecurity.shared.cjs at packaged startup",
+  );
+  assert.ok(
+    config.files.includes("domain/**/*.cjs"),
+    "omitting domain/*.cjs from the asar makes createWindow throw MODULE_NOT_FOUND",
+  );
 });
 
 test("unpacked Tool CLI includes capability runtime dependencies", () => {

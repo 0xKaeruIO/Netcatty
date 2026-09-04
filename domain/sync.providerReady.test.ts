@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hasProviderConnectionData, isProviderReadyForSync } from './sync';
+import { hasProviderConnectionData, isProviderReadyForSync, SYNC_CONSTANTS } from './sync';
 
 test('hasProviderConnectionData treats falsy scalar configs as present', () => {
   assert.equal(hasProviderConnectionData({ config: false }), true);
@@ -32,4 +32,10 @@ test('isProviderReadyForSync keeps error status ready when only scalar config re
     isProviderReadyForSync({ status: 'disconnected', config: false }),
     false,
   );
+});
+
+test('OAuth public client IDs stay non-empty without CI secrets', () => {
+  assert.ok(SYNC_CONSTANTS.GITHUB_CLIENT_ID.length > 0);
+  assert.ok(SYNC_CONSTANTS.GOOGLE_CLIENT_ID.length > 0);
+  assert.ok(SYNC_CONSTANTS.ONEDRIVE_CLIENT_ID.length > 0);
 });

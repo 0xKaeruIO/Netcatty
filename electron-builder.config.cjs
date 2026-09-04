@@ -65,9 +65,11 @@ module.exports = {
         // (terminalFlowAck.cjs). Must ship beside electron/ in app.asar.
         'infrastructure/config/terminalFlowConstants.cjs',
         'infrastructure/config/terminalFlowConstants.json',
-        // Renderer and Mosh's main-process bootstrap share the same
-        // fail-closed prompt classifier at runtime.
-        'domain/terminalPromptSecurity.shared.cjs',
+        // Domain shared CJS modules required by the Electron main process at
+        // packaged startup (Mosh prompt classifier, Xshell password decrypt).
+        // These live outside electron/, so omitting them makes createWindow
+        // throw MODULE_NOT_FOUND and the installer shows "Failed to load the UI".
+        'domain/**/*.cjs',
         'lib/**/*.cjs',
         'lib/**/*.json',
         'skills/**/*',
