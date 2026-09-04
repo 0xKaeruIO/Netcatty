@@ -25,6 +25,23 @@ test("SecureCRT uses a directory picker and keeps every selected session file", 
   assert.deepEqual(selectVaultImportFiles("csv", files), [files[0]]);
 });
 
+test("Xshell uses a directory picker and keeps every selected session file", () => {
+  const files = [
+    new File(["one"], "one.xsh"),
+    new File(["two"], "two.xsh"),
+  ];
+
+  assert.deepEqual(getVaultImportPickerMode("xshell"), {
+    directory: true,
+    multiple: true,
+  });
+  assert.deepEqual(getVaultImportPickerMode("xshell", "file"), {
+    directory: false,
+    multiple: false,
+  });
+  assert.deepEqual(selectVaultImportFiles("xshell", files), files);
+});
+
 test("vault import destination supports preserve, existing, and new groups", () => {
   assert.deepEqual(buildVaultImportDestination({ mode: "preserve" }), {
     mode: "preserve",

@@ -23,6 +23,7 @@ workerScope.addEventListener("message", async (event: MessageEvent<VaultImportWo
       relativePaths: event.data.relativePaths,
       encoding: event.data.encoding,
       masterPassword: event.data.masterPassword,
+      xshellDecryptContext: event.data.xshellDecryptContext,
       onProgress: ({ completedFiles, totalFiles, fileName }) => {
         post({
           type: "progress",

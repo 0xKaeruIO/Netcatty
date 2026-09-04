@@ -162,6 +162,18 @@ export const ruVaultMessages: Messages = {
   'vault.import.securecrt.folderDesc': 'Импортировать все сеансы с сохранением структуры папок.',
   'vault.import.securecrt.file': 'Один файл сеанса',
   'vault.import.securecrt.fileDesc': 'Импортировать один файл сеанса SecureCRT .ini.',
+  'vault.import.xshell.directoryHint': 'Выберите папку Sessions из Xshell.',
+  'vault.import.xshell.chooseSource': 'Выберите источник импорта Xshell.',
+  'vault.import.xshell.sourceQuestion': 'Что вы хотите импортировать?',
+  'vault.import.xshell.promptTitle': 'Импорт из Xshell',
+  'vault.import.xshell.promptDesc':
+    'Выберите папку Sessions из Xshell, чтобы импортировать все сеансы с сохранением структуры, или один файл сеанса .xsh. Пароли сеансов расшифровываются текущей учётной записью Windows и сохраняются как обычные пароли хоста; правила Expect/Send становятся правилами стартовой команды.',
+  'vault.import.xshell.folder': 'Папка Sessions',
+  'vault.import.xshell.folderDesc': 'Импортировать все сеансы с сохранением структуры папок.',
+  'vault.import.xshell.file': 'Один файл сеанса',
+  'vault.import.xshell.fileDesc': 'Импортировать один файл сеанса Xshell .xsh.',
+  'vault.import.xshell.decryptHint':
+    'Пароли сеансов расшифровываются при импорте текущей учётной записью Windows и сохраняются как обычные пароли хоста, чтобы их можно было синхронизировать на другие компьютеры.',
   'vault.import.csv.tip': 'Массовый импорт: используйте шаблон CSV.',
   'vault.import.csv.downloadTemplate': 'Скачать шаблон CSV',
   'vault.import.toast.start': 'Импорт из {format}...',

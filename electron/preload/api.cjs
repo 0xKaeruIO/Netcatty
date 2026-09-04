@@ -1681,6 +1681,7 @@ function createPreloadApi(ctx) {
   credentialsAvailable: () => ipcRenderer.invoke("netcatty:credentials:available"),
   credentialsEncrypt: (plaintext) => ipcRenderer.invoke("netcatty:credentials:encrypt", plaintext),
   credentialsDecrypt: (value) => ipcRenderer.invoke("netcatty:credentials:decrypt", value),
+  getXshellDecryptContext: () => ipcRenderer.invoke("netcatty:xshell:getDecryptContext"),
 
   // Auto-update
   checkForUpdate: () => ipcRenderer.invoke("netcatty:update:check"),

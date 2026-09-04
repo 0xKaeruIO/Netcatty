@@ -498,6 +498,7 @@ function createBridgeRegistrar(context) {
     compressUploadBridge.registerHandlers(ipcMain, { terminalWorkerManager });
     globalShortcutBridge.registerHandlers(ipcMain);
     credentialBridge.registerHandlers(ipcMain, electronModule);
+    require("../bridges/xshellPassword.cjs").registerHandlers(ipcMain);
     autoUpdateBridge.init(deps);
     autoUpdateBridge.registerHandlers(ipcMain);
     orgCenterBridge.registerHandlers(ipcMain);

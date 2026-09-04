@@ -159,3 +159,104 @@ test("SecureCRT keeps a real nested Sessions folder when that folder was selecte
   assert.equal(result.hosts[0]?.group, "Sessions");
   assert.deepEqual(result.groups, ["Sessions"]);
 });
+
+const xshellFile = (
+  relativePath: string,
+  hostname: string | null,
+  extras: string[] = [],
+) => {
+  const file = new File([[
+    "[SessionInfo]",
+    "Description=Xshell session file",
+    "[CONNECTION]",
+    hostname ? `Host=${hostname}` : "Port=22",
+    "Port=22",
+    "Protocol=SSH",
+    "[CONNECTION:AUTHENTICATION]",
+    "UserName=root",
+    "UseExpectSend=0",
+    "ExpectSend_Count=0",
+    ...extras,
+  ].join("\n")], relativePath.split("/").at(-1) ?? "session.xsh");
+  Object.defineProperty(file, "webkitRelativePath", { value: relativePath });
+  return file;
+};
+
+test("Xshell directory import reads every session and preserves folder groups", async () => {
+  const result = await importVaultHostFiles({
+    format: "xshell",
+    files: [
+      xshellFile("Sessions/ccc/ssss/新建会话.xsh", "192.168.0.3"),
+      xshellFile("Sessions/ccc/folder.ini", "should-not-import.example.com"),
+      xshellFile("Sessions/default/ignored.txt", "should-not-import.example.com"),
+      xshellFile("Sessions/Broken.xsh", null),
+    ],
+  });
+
+  assert.deepEqual(result.stats, {
+    parsed: 2,
+    imported: 1,
+    skipped: 1,
+    duplicates: 0,
+  });
+  assert.equal(result.hosts.length, 1);
+  assert.equal(result.hosts[0]?.label, "新建会话");
+  assert.equal(result.hosts[0]?.hostname, "192.168.0.3");
+  assert.equal(result.hosts[0]?.group, "ccc/ssss");
+  assert.deepEqual(result.groups, ["ccc/ssss"]);
+  assert.match(result.issues[0]?.message ?? "", /Broken\.xsh/);
+});
+
+test("Xshell keeps separate session files that point to the same endpoint", async () => {
+  const result = await importVaultHostFiles({
+    format: "xshell",
+    files: [
+      xshellFile("Sessions/Prod/web.xsh", "shared.example.com"),
+      xshellFile("Sessions/Staging/web.xsh", "shared.example.com"),
+    ],
+  });
+
+  assert.equal(result.hosts.length, 2);
+  assert.deepEqual(result.hosts.map((host) => host.group), ["Prod", "Staging"]);
+});
+
+test("Xshell destination group keeps same-endpoint session files", async () => {
+  const { applyVaultImportDestination } = await import("../../domain/vaultImport");
+  const imported = await importVaultHostFiles({
+    format: "xshell",
+    files: [
+      xshellFile("Sessions/Prod/web.xsh", "shared.example.com"),
+      xshellFile("Sessions/Staging/web.xsh", "shared.example.com"),
+    ],
+  });
+
+  const targeted = applyVaultImportDestination(
+    imported,
+    { mode: "group", group: "Imported/Xshell" },
+    { collapseDuplicateEndpoints: false },
+  );
+
+  assert.equal(targeted.hosts.length, 2);
+  assert.deepEqual(targeted.hosts.map((host) => host.group), [
+    "Imported/Xshell",
+    "Imported/Xshell",
+  ]);
+});
+
+test("Xshell folder paths strip Xshell/Sessions wrappers when a parent folder was selected", async () => {
+  const result = await importVaultHostFiles({
+    format: "xshell",
+    files: [xshellFile("Documents/Xshell/Sessions/ccc/ssss/jump.xsh", "jump.example.com")],
+  });
+
+  assert.equal(result.hosts[0]?.group, "ccc/ssss");
+});
+
+test("Xshell keeps a real nested Sessions folder when that folder was selected", async () => {
+  const result = await importVaultHostFiles({
+    format: "xshell",
+    files: [xshellFile("Sessions/Sessions/Nested.xsh", "nested.example.com")],
+  });
+
+  assert.equal(result.hosts[0]?.group, "Sessions");
+});

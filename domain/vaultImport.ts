@@ -17,6 +17,9 @@ import { parseQuickConnectInput } from "./quickConnect";
 import { findExactHeaderIndex, findHeaderIndex, parseCsv } from "./vaultImport/csvUtils";
 import { decodeCsvKeyPath, decodeCsvPassphrase } from "./vaultImport/csvCredentialFields";
 import { attachMobaXtermPasswords } from "./vaultImport/mobaXtermPasswords";
+import { looksLikeXshellSession, parseXshellSession } from "./vaultImport/xshell";
+import { decryptXshellPassword, type XshellDecryptContext } from "./xshellPassword";
+
 export {
   exportHostsToCsvWithStats,
   getVaultCsvTemplate,
@@ -103,6 +106,7 @@ export type VaultImportFormat =
   | "mobaxterm"
   | "csv"
   | "securecrt"
+  | "xshell"
   | "ssh_config";
 
 export const VAULT_IMPORT_FORMATS: VaultImportFormat[] = [
@@ -110,8 +114,15 @@ export const VAULT_IMPORT_FORMATS: VaultImportFormat[] = [
   "putty",
   "mobaxterm",
   "securecrt",
+  "xshell",
   "ssh_config",
 ];
+
+export function vaultImportKeepsDistinctSessionFiles(
+  format: VaultImportFormat,
+): boolean {
+  return format === "securecrt" || format === "xshell";
+}
 
 type VaultImportIssueLevel = "warning" | "error";
 
@@ -142,8 +153,8 @@ export type VaultImportDestination =
 
 export type ApplyVaultImportDestinationOptions = {
   /**
-   * When false, only rewrite groups. SecureCRT keeps distinct session files that
-   * share an endpoint even after an import-location override.
+   * When false, only rewrite groups. SecureCRT and Xshell keep distinct session
+   * files that share an endpoint even after an import-location override.
    * @default true
    */
   collapseDuplicateEndpoints?: boolean;
@@ -1105,6 +1116,91 @@ const importFromSecureCrt = (text: string, fileName?: string): VaultImportResult
   };
 };
 
+const importFromXshell = (
+  text: string,
+  fileName?: string,
+  decryptContext?: XshellDecryptContext | null,
+): VaultImportResult => {
+  const parsed = parseXshellSession(text, fileName);
+  const issues: VaultImportIssue[] = [...parsed.issues];
+
+  if (parsed.unsupportedProtocol) {
+    return {
+      hosts: [],
+      groups: [],
+      issues: [
+        ...issues,
+        {
+          level: "warning",
+          message: `Xshell session: unsupported protocol "${parsed.unsupportedProtocol}".`,
+        },
+      ],
+      stats: { parsed: 1, imported: 0, skipped: 1, duplicates: 0 },
+    };
+  }
+
+  if (!parsed.hostname) {
+    return {
+      hosts: [],
+      groups: [],
+      issues: [
+        ...issues,
+        {
+          level: "warning",
+          message: "Xshell session: missing hostname.",
+        },
+      ],
+      stats: { parsed: 1, imported: 0, skipped: 1, duplicates: 0 },
+    };
+  }
+
+  const protocol = parsed.protocol ?? "ssh";
+  let host = createHost({
+    label: parsed.label,
+    hostname: parsed.hostname,
+    username: parsed.username,
+    port: parsed.port ?? (protocol === "ssh" ? DEFAULT_SSH_PORT : 23),
+    protocol,
+    notes: parsed.notes,
+    keyPath: parsed.keyPath,
+  });
+  if (parsed.startupCommandRunMode === "rules" && parsed.startupCommandRules?.length) {
+    host = {
+      ...host,
+      startupCommandRunMode: "rules",
+      startupCommandRules: parsed.startupCommandRules,
+    };
+  } else if (parsed.startupCommand) {
+    host = { ...host, startupCommand: parsed.startupCommand };
+  }
+  if (parsed.agentForwarding) host = { ...host, agentForwarding: true };
+  if (parsed.charset) host = { ...host, charset: parsed.charset };
+  if (parsed.encryptedPassword) {
+    const password = decryptContext
+      ? decryptXshellPassword(
+        parsed.encryptedPassword,
+        parsed.sessionVersion || "7.0",
+        decryptContext,
+      )
+      : undefined;
+    if (password) {
+      host = { ...host, password, savePassword: true };
+    } else {
+      issues.push({
+        level: "warning",
+        message: "Could not decrypt the Xshell session password. Import this session on the Windows account that created it.",
+      });
+    }
+  }
+
+  return {
+    hosts: [host],
+    groups: [],
+    issues,
+    stats: { parsed: 1, imported: 1, skipped: 0, duplicates: 0 },
+  };
+};
+
 const importFromMobaXterm = (
   text: string,
   options?: { masterPassword?: string },
@@ -1308,7 +1404,11 @@ const importFromMobaXterm = (
 export const importVaultHostsFromText = (
   format: VaultImportFormat,
   text: string,
-  options?: { fileName?: string; masterPassword?: string },
+  options?: {
+    fileName?: string;
+    masterPassword?: string;
+    xshellDecryptContext?: XshellDecryptContext | null;
+  },
 ): VaultImportResult => {
   const input = text ?? "";
   switch (format) {
@@ -1320,6 +1420,8 @@ export const importVaultHostsFromText = (
       return importFromSshConfig(input);
     case "securecrt":
       return importFromSecureCrt(input, options?.fileName);
+    case "xshell":
+      return importFromXshell(input, options?.fileName, options?.xshellDecryptContext);
     case "mobaxterm":
       return importFromMobaXterm(input, options);
     default: {
@@ -1359,6 +1461,10 @@ export function detectVaultImportFormat(text: string): VaultImportFormat | null 
 
   if (/S:"Hostname"/m.test(input) && (/S:"Username"/m.test(input) || /D:"\[Sessions\]/i.test(input))) {
     return "securecrt";
+  }
+
+  if (looksLikeXshellSession(input)) {
+    return "xshell";
   }
 
   const firstLine = input.split(/\r?\n/, 1)[0] ?? "";

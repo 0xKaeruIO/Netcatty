@@ -146,6 +146,11 @@ declare global {
     credentialsAvailable?(): Promise<boolean>;
     credentialsEncrypt?(plaintext: string): Promise<string>;
     credentialsDecrypt?(value: string): Promise<string>;
+    getXshellDecryptContext?(): Promise<{
+      username: string;
+      sid: string;
+      encoding?: string;
+    } | null>;
   }
 }
 

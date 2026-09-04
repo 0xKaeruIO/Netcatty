@@ -187,7 +187,7 @@ test("import format step keeps destination settings off the main card grid", asy
     "utf8",
   );
   assert.match(source, /data-import-destination-settings="true"/);
-  assert.match(source, /data-import-securecrt-prompt="true"/);
+  assert.match(source, /data-import-session-source-prompt="true"/);
   assert.match(source, /step === "destination"/);
   assert.match(source, /FolderTree/);
   assert.doesNotMatch(

@@ -116,6 +116,18 @@ export const esVaultMessages: Messages = {
   'vault.import.securecrt.folderDesc': 'Importa todas las sesiones y conserva la estructura de carpetas.',
   'vault.import.securecrt.file': 'Archivo de sesión único',
   'vault.import.securecrt.fileDesc': 'Importa una sesión .ini de SecureCRT.',
+  'vault.import.xshell.directoryHint': 'Selecciona la carpeta de sesiones de Xshell.',
+  'vault.import.xshell.chooseSource': 'Elige una fuente de importación de Xshell.',
+  'vault.import.xshell.sourceQuestion': '¿Qué te gustaría importar?',
+  'vault.import.xshell.promptTitle': 'Importar desde Xshell',
+  'vault.import.xshell.promptDesc':
+    'Elige la carpeta de sesiones de Xshell para importar todas las sesiones conservando la estructura de carpetas, o selecciona un solo archivo de sesión .xsh. Las contraseñas se descifran con la cuenta de Windows actual y se guardan como contraseñas normales del host; las reglas Expect/Send se convierten en reglas de comando de inicio.',
+  'vault.import.xshell.folder': 'Carpeta de sesiones',
+  'vault.import.xshell.folderDesc': 'Importa todas las sesiones y conserva la estructura de carpetas.',
+  'vault.import.xshell.file': 'Archivo de sesión único',
+  'vault.import.xshell.fileDesc': 'Importa una sesión .xsh de Xshell.',
+  'vault.import.xshell.decryptHint':
+    'Las contraseñas de sesión se descifran al importar con la cuenta de Windows actual y se guardan como contraseñas normales del host, para poder sincronizarlas a otros equipos.',
   'vault.import.csv.tip': 'Importación masiva: usa la plantilla CSV.',
   'vault.import.csv.downloadTemplate': 'Descargar plantilla CSV',
   'vault.import.toast.start': 'Importando desde {format}...',

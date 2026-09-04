@@ -65,3 +65,26 @@ test("MobaXterm import can force GB18030 for ambiguous legacy Chinese text", asy
 
   assert.equal(result.hosts[0]?.label, "隆prod");
 });
+
+test("Xshell import decodes UTF-16 LE session files", async () => {
+  const text = [
+    "[SessionInfo]",
+    "Description=Xshell session file",
+    "[CONNECTION]",
+    "Host=10.0.0.8",
+    "Port=22",
+    "Protocol=SSH",
+    "[CONNECTION:AUTHENTICATION]",
+    "UserName=root",
+    "UseExpectSend=0",
+  ].join("\n");
+  const encoded = Buffer.from(`\ufeff${text}`, "utf16le");
+  const decoded = await readVaultImportFile(
+    "xshell",
+    new File([encoded], "jump.xsh", { type: "text/plain" }),
+  );
+  const result = importVaultHostsFromText("xshell", decoded, { fileName: "jump.xsh" });
+
+  assert.equal(result.hosts[0]?.hostname, "10.0.0.8");
+  assert.equal(result.hosts[0]?.username, "root");
+});

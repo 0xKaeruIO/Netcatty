@@ -180,9 +180,9 @@ export interface Host {
   // Runtime hint for deep-link launches that target file transfer (e.g.
   // JumpServer sftp payloads): auto-open the SFTP side panel on connect.
   autoOpenSftpPanel?: boolean;
-  password?: string;
-  savePassword?: boolean; // Whether to save the password (default: true)
-  authMethod?: HostAuthMethod;
+    password?: string;
+    savePassword?: boolean; // Whether to save the password (default: true)
+    authMethod?: HostAuthMethod;
   // Version 1 distinguishes the explicit per-host login choices from the
   // legacy "password" default, which did not mean password-only.
   authPolicyVersion?: 1;

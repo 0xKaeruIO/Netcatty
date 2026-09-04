@@ -4,6 +4,7 @@ import type {
 } from "../../domain/vaultImport";
 
 import type { VaultImportFileEncoding } from "./vaultImportFile";
+import type { XshellDecryptContext } from "../../domain/xshellPassword";
 
 export type VaultImportWorkerStage = "reading" | "parsing";
 
@@ -22,6 +23,7 @@ export type VaultImportWorkerRequest = {
   relativePaths: string[];
   encoding: VaultImportFileEncoding | undefined;
   masterPassword?: string;
+  xshellDecryptContext?: XshellDecryptContext | null;
 };
 
 export type VaultImportWorkerResponse =
@@ -44,6 +46,7 @@ interface ImportVaultHostsInWorkerOptions {
   files: File[];
   encoding?: VaultImportFileEncoding;
   masterPassword?: string;
+  xshellDecryptContext?: XshellDecryptContext | null;
   signal?: AbortSignal;
   createWorker?: () => VaultImportWorkerLike;
   onProgress?: (progress: VaultImportWorkerProgress) => void;
@@ -60,6 +63,7 @@ export function importVaultHostsInWorker({
   files,
   encoding,
   masterPassword,
+  xshellDecryptContext,
   signal,
   createWorker = createVaultImportWorker,
   onProgress,
@@ -114,6 +118,7 @@ export function importVaultHostsInWorker({
       relativePaths: files.map((file) => file.webkitRelativePath),
       encoding,
       ...(masterPassword ? { masterPassword } : {}),
+      ...(xshellDecryptContext ? { xshellDecryptContext } : {}),
     });
   });
 }

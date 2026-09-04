@@ -116,6 +116,18 @@ export const enVaultMessages: Messages = {
   'vault.import.securecrt.folderDesc': 'Import every session and keep the folder structure.',
   'vault.import.securecrt.file': 'Single session file',
   'vault.import.securecrt.fileDesc': 'Import one SecureCRT .ini session.',
+  'vault.import.xshell.directoryHint': 'Select the Xshell Sessions folder.',
+  'vault.import.xshell.chooseSource': 'Choose an Xshell import source.',
+  'vault.import.xshell.sourceQuestion': 'What would you like to import?',
+  'vault.import.xshell.promptTitle': 'Import from Xshell',
+  'vault.import.xshell.promptDesc':
+    'Pick the Xshell Sessions folder to import every session while keeping the folder structure, or choose a single .xsh session file. Session passwords are decrypted with the current Windows account and saved as normal host passwords; Expect/Send login rules become startup command rules.',
+  'vault.import.xshell.folder': 'Sessions folder',
+  'vault.import.xshell.folderDesc': 'Import every session and keep the folder structure.',
+  'vault.import.xshell.file': 'Single session file',
+  'vault.import.xshell.fileDesc': 'Import one Xshell .xsh session.',
+  'vault.import.xshell.decryptHint':
+    'Session passwords are decrypted on import with the current Windows account and saved as normal host passwords, so they can sync to other machines.',
   'vault.import.csv.tip': 'Bulk import: use the CSV template.',
   'vault.import.csv.downloadTemplate': 'Download CSV template',
   'vault.import.toast.start': 'Importing from {format}...',

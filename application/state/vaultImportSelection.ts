@@ -2,20 +2,22 @@ import type {
   VaultImportDestination,
   VaultImportFormat,
 } from "../../domain/vaultImport";
+import { vaultImportKeepsDistinctSessionFiles } from "../../domain/vaultImport";
 
 export type VaultImportDestinationMode = "preserve" | "existing" | "new";
 
 export function getVaultImportPickerMode(
   format: VaultImportFormat,
-  secureCrtSource: "folder" | "file" = "folder",
+  sessionSource: "folder" | "file" = "folder",
 ): {
   directory: boolean;
   multiple: boolean;
 } {
-  const isSecureCrtFolder = format === "securecrt" && secureCrtSource === "folder";
+  const isSessionFolder = vaultImportKeepsDistinctSessionFiles(format)
+    && sessionSource === "folder";
   return {
-    directory: isSecureCrtFolder,
-    multiple: isSecureCrtFolder,
+    directory: isSessionFolder,
+    multiple: isSessionFolder,
   };
 }
 
@@ -24,7 +26,7 @@ export function selectVaultImportFiles(
   files: ArrayLike<File>,
 ): File[] {
   const selected = Array.from(files);
-  return format === "securecrt" ? selected : selected.slice(0, 1);
+  return vaultImportKeepsDistinctSessionFiles(format) ? selected : selected.slice(0, 1);
 }
 
 const normalizeGroup = (raw: string | undefined): string | undefined => {

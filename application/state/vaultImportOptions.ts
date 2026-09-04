@@ -1,5 +1,6 @@
 import type { VaultImportDestination } from "../../domain/vaultImport";
 import type { VaultImportFileEncoding } from "./vaultImportFile";
+import type { XshellDecryptContext } from "../../domain/xshellPassword";
 
 /** Options for a vault host-file import (kept out of UI modules). */
 export type VaultImportOptions = {
@@ -7,6 +8,7 @@ export type VaultImportOptions = {
   filePath?: string;
   encoding?: VaultImportFileEncoding;
   masterPassword?: string;
+  xshellDecryptContext?: XshellDecryptContext | null;
   destination?: VaultImportDestination;
 };
 

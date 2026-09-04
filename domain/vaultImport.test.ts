@@ -12,6 +12,7 @@ import {
 } from "./vaultImport.ts";
 import { encodeCsvPassphrase } from "./vaultImport/csvCredentialFields.ts";
 import type { Host } from "./models.ts";
+import { encryptXshellPassword } from "./xshellPassword.ts";
 
 const mobaXtermSshSession = (
   hostname: string,
@@ -164,6 +165,136 @@ test("SecureCRT import selects the port field for the configured SSH version", (
 
   assert.equal(ssh2.hosts[0]?.port, 2222);
   assert.equal(ssh1.hosts[0]?.port, 2223);
+});
+
+const xshellSession = ({
+  host = "192.168.0.3",
+  port = "22",
+  protocol = "SSH",
+  username = "root",
+  description = "",
+  password = "encrypted-blob",
+  useExpectSend = "1",
+  expectSend = [
+    { expect: "", send: "ssh jingyang@192.168.0.127" },
+    { expect: "password:", send: "secret" },
+  ],
+  remoteCommand = "",
+  agentForwarding = "0",
+  codePage = "65001",
+}: {
+  host?: string;
+  port?: string;
+  protocol?: string;
+  username?: string;
+  description?: string;
+  password?: string;
+  useExpectSend?: string;
+  expectSend?: Array<{ expect: string; send: string }>;
+  remoteCommand?: string;
+  agentForwarding?: string;
+  codePage?: string;
+} = {}) => [
+  "[SessionInfo]",
+  "Version=7.0",
+  "Description=Xshell session file",
+  "[CONNECTION]",
+  `Port=${port}`,
+  `Host=${host}`,
+  `Protocol=${protocol}`,
+  `Description=${description}`,
+  "[CONNECTION:AUTHENTICATION]",
+  `UserName=${username}`,
+  `Password=${password}`,
+  `UseExpectSend=${useExpectSend}`,
+  `ExpectSend_Count=${expectSend.length}`,
+  ...expectSend.flatMap((rule, index) => [
+    `ExpectSend_Expect_${index}=${rule.expect}`,
+    `ExpectSend_Send_${index}=${rule.send}`,
+  ]),
+  "[CONNECTION:SSH]",
+  `AgentForwarding=${agentForwarding}`,
+  `RemoteCommand=${remoteCommand}`,
+  "[TERMINAL]",
+  `CodePage=${codePage}`,
+].join("\n");
+
+const XSHELL_DECRYPT_CONTEXT = {
+  username: "asus",
+  sid: "S-1-5-21-736521517-4232353097-1340300005-1001",
+  encoding: "utf8",
+};
+
+test("detectVaultImportFormat recognizes Xshell session files", () => {
+  assert.equal(detectVaultImportFormat(xshellSession()), "xshell");
+});
+
+test("Xshell import decrypts the session password onto the host", () => {
+  const ciphertext = encryptXshellPassword("imported-secret", "7.0", XSHELL_DECRYPT_CONTEXT);
+  const result = importVaultHostsFromText("xshell", xshellSession({
+    description: "jump box",
+    agentForwarding: "1",
+    password: ciphertext,
+  }), {
+    fileName: "新建会话.xsh",
+    xshellDecryptContext: XSHELL_DECRYPT_CONTEXT,
+  });
+
+  assert.equal(result.hosts.length, 1);
+  assert.equal(result.hosts[0].label, "新建会话");
+  assert.equal(result.hosts[0].hostname, "192.168.0.3");
+  assert.equal(result.hosts[0].username, "root");
+  assert.equal(result.hosts[0].port, 22);
+  assert.equal(result.hosts[0].protocol, "ssh");
+  assert.equal(result.hosts[0].notes, "jump box");
+  assert.equal(result.hosts[0].agentForwarding, true);
+  assert.equal(result.hosts[0].charset, "utf-8");
+  assert.equal(result.hosts[0].password, "imported-secret");
+  assert.equal(result.hosts[0].savePassword, true);
+  assert.equal(result.hosts[0].startupCommandRunMode, "rules");
+  assert.deepEqual(result.hosts[0].startupCommandRules, [
+    { expect: "", send: "ssh jingyang@192.168.0.127" },
+    { expect: "password:", send: "secret" },
+  ]);
+  assert.equal(result.issues.some((issue) => /password/i.test(issue.message)), false);
+});
+
+test("Xshell import warns when the session password cannot be decrypted", () => {
+  const ciphertext = encryptXshellPassword("imported-secret", "7.0", XSHELL_DECRYPT_CONTEXT);
+  const result = importVaultHostsFromText("xshell", xshellSession({
+    password: ciphertext,
+    useExpectSend: "0",
+    expectSend: [],
+  }), { fileName: "session.xsh" });
+
+  assert.equal(result.hosts[0]?.password, undefined);
+  assert.match(result.issues[0]?.message ?? "", /could not decrypt/i);
+});
+
+test("Xshell import uses RemoteCommand when ExpectSend is off", () => {
+  const result = importVaultHostsFromText("xshell", xshellSession({
+    useExpectSend: "0",
+    expectSend: [],
+    remoteCommand: "tmux attach -t ops",
+    password: "",
+  }));
+
+  assert.equal(result.hosts[0]?.startupCommand, "tmux attach -t ops");
+  assert.equal(result.hosts[0]?.startupCommandRunMode, undefined);
+  assert.equal(result.issues.length, 0);
+});
+
+test("Xshell import skips serial and other unsupported protocols", () => {
+  const result = importVaultHostsFromText("xshell", xshellSession({
+    protocol: "SERIAL",
+    password: "",
+    useExpectSend: "0",
+    expectSend: [],
+  }));
+
+  assert.equal(result.hosts.length, 0);
+  assert.equal(result.stats.skipped, 1);
+  assert.match(result.issues[0]?.message ?? "", /SERIAL/i);
 });
 
 test("vault import can place every imported host into one selected group", () => {

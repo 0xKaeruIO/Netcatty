@@ -8,7 +8,8 @@ export const readVaultImportFile = (
   file: File,
   encoding: VaultImportFileEncoding = "auto",
 ): Promise<string> => {
-  if (format !== "mobaxterm") return readTextFile(file);
+  const useLegacyChineseFallback = format === "mobaxterm" || format === "xshell";
+  if (!useLegacyChineseFallback) return readTextFile(file);
   if (encoding !== "auto") return readTextFile(file, { encoding });
   return readTextFile(file, { fallbackEncoding: "gb18030" });
 };

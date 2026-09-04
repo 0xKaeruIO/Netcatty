@@ -3,10 +3,12 @@ import {
   buildVaultHostMergeKey,
   importVaultHostsFromText,
   mergeVaultImportIssues,
+  vaultImportKeepsDistinctSessionFiles,
   type VaultImportFormat,
   type VaultImportIssue,
   type VaultImportResult,
 } from "../../domain/vaultImport";
+import type { XshellDecryptContext } from "../../domain/xshellPassword";
 import {
   readVaultImportFile,
   type VaultImportFileEncoding,
@@ -24,6 +26,7 @@ interface ImportVaultHostFilesOptions {
   relativePaths?: string[];
   encoding?: VaultImportFileEncoding;
   masterPassword?: string;
+  xshellDecryptContext?: XshellDecryptContext | null;
   onProgress?: (progress: VaultImportBatchProgress) => void;
 }
 
@@ -32,33 +35,53 @@ const SECURE_CRT_METADATA_FILES = new Set([
   "default.ini",
 ]);
 
+const SESSION_FOLDER_WRAPPERS: Record<"securecrt" | "xshell", string[]> = {
+  securecrt: ["sessions"],
+  xshell: ["sessions", "xshell"],
+};
+
 const normalizeRelativePath = (file: File, transferredRelativePath?: string): string[] => {
   const relativePath = transferredRelativePath?.trim() || file.webkitRelativePath?.trim();
   if (!relativePath) return [file.name];
   return relativePath.split(/[\\/]+/).filter(Boolean);
 };
 
-const secureCrtGroupFromFile = (
+const sessionFolderGroupFromFile = (
   file: File,
-  transferredRelativePath?: string,
+  transferredRelativePath: string | undefined,
+  wrappers: string[],
 ): string | undefined => {
   const segments = normalizeRelativePath(file, transferredRelativePath);
   if (segments.length <= 1) return undefined;
 
   segments.pop();
-  const selectedRoot = segments.shift();
-  if (
-    selectedRoot?.toLowerCase() !== "sessions"
-    && segments[0]?.toLowerCase() === "sessions"
-  ) {
+  const selectedRoot = segments.shift()?.toLowerCase();
+  const wrapperSet = new Set(wrappers.map((name) => name.toLowerCase()));
+  if (selectedRoot && !wrapperSet.has(selectedRoot)) {
+    while (segments[0] && wrapperSet.has(segments[0].toLowerCase())) {
+      segments.shift();
+    }
+  } else if (selectedRoot === "xshell" && segments[0]?.toLowerCase() === "sessions") {
     segments.shift();
   }
   return segments.length > 0 ? segments.join("/") : undefined;
 };
 
-const shouldIgnoreSecureCrtFile = (file: File): boolean => (
-  SECURE_CRT_METADATA_FILES.has(file.name.toLowerCase())
-  || !file.name.toLowerCase().endsWith(".ini")
+const shouldIgnoreSessionFile = (format: VaultImportFormat, file: File): boolean => {
+  const name = file.name.toLowerCase();
+  if (format === "securecrt") {
+    return SECURE_CRT_METADATA_FILES.has(name) || !name.endsWith(".ini");
+  }
+  if (format === "xshell") {
+    return name === "folder.ini" || !name.endsWith(".xsh");
+  }
+  return false;
+};
+
+const emptySessionMessage = (format: VaultImportFormat, fileName: string): string => (
+  format === "xshell"
+    ? `${fileName}: no importable Xshell session found.`
+    : `${fileName}: no importable SecureCRT session found.`
 );
 
 export async function importVaultHostFiles({
@@ -67,14 +90,16 @@ export async function importVaultHostFiles({
   relativePaths,
   encoding,
   masterPassword,
+  xshellDecryptContext,
   onProgress,
 }: ImportVaultHostFilesOptions): Promise<VaultImportResult> {
+  const keepDistinct = vaultImportKeepsDistinctSessionFiles(format);
   const sourceFiles = files.map((file, index) => ({
     file,
     relativePath: relativePaths?.[index],
   }));
-  const selectedFiles = format === "securecrt"
-    ? sourceFiles.filter(({ file }) => !shouldIgnoreSecureCrtFile(file))
+  const selectedFiles = keepDistinct
+    ? sourceFiles.filter(({ file }) => !shouldIgnoreSessionFile(format, file))
     : sourceFiles.slice(0, 1);
   const hosts: Host[] = [];
   const issues: VaultImportIssue[] = [];
@@ -83,6 +108,9 @@ export async function importVaultHostFiles({
   let parsed = 0;
   let skipped = 0;
   let duplicates = 0;
+  const wrappers = format === "xshell"
+    ? SESSION_FOLDER_WRAPPERS.xshell
+    : SESSION_FOLDER_WRAPPERS.securecrt;
 
   for (let index = 0; index < selectedFiles.length; index++) {
     const { file, relativePath } = selectedFiles[index];
@@ -91,9 +119,10 @@ export async function importVaultHostFiles({
       const result = importVaultHostsFromText(format, text, {
         fileName: file.name,
         masterPassword,
+        xshellDecryptContext,
       });
-      const group = format === "securecrt"
-        ? secureCrtGroupFromFile(file, relativePath)
+      const group = keepDistinct
+        ? sessionFolderGroupFromFile(file, relativePath, wrappers)
         : undefined;
       const fileHosts = result.hosts.map((host) => (
         group && !host.group ? { ...host, group } : host
@@ -114,14 +143,14 @@ export async function importVaultHostFiles({
           skipped++;
           issues.push({
             level: "warning",
-            message: `${file.name}: no importable SecureCRT session found.`,
+            message: emptySessionMessage(format, file.name),
           });
         }
       } else {
         hosts.push(...fileHosts);
       }
     } catch (error) {
-      if (format !== "securecrt" || selectedFiles.length <= 1) throw error;
+      if (!keepDistinct || selectedFiles.length <= 1) throw error;
       skipped++;
       issues.push({
         level: "error",
@@ -137,7 +166,7 @@ export async function importVaultHostFiles({
   }
 
   const seen = new Set<string>();
-  const uniqueHosts = format === "securecrt"
+  const uniqueHosts = keepDistinct
     ? hosts
     : hosts.filter((host) => {
       const key = buildVaultHostMergeKey(host);

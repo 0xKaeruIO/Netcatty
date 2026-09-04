@@ -172,7 +172,7 @@ function resolveVaultImportFormat(raw: unknown): VaultImportFormat | 'auto' | { 
     return format as VaultImportFormat;
   }
   return {
-    error: `Unsupported format "${format}". Use csv, putty, mobaxterm, securecrt, ssh_config, or auto.`,
+    error: `Unsupported format "${format}". Use csv, putty, mobaxterm, securecrt, xshell, ssh_config, or auto.`,
   };
 }
 
@@ -813,7 +813,7 @@ export async function handleVaultAgentOp(
         if (!detected) {
           return {
             ok: false,
-            error: 'Could not detect import format. Specify csv, putty, mobaxterm, securecrt, or ssh_config.',
+            error: 'Could not detect import format. Specify csv, putty, mobaxterm, securecrt, xshell, or ssh_config.',
           };
         }
         resolvedFormat = detected;

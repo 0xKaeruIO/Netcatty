@@ -22,7 +22,7 @@ import {
   selectVaultImportFiles,
   type VaultImportDestinationMode,
 } from "../../application/state/vaultImportSelection";
-import { getVaultCsvTemplate } from "../../domain/vaultImport";
+import { getVaultCsvTemplate, vaultImportKeepsDistinctSessionFiles } from "../../domain/vaultImport";
 import type {
   VaultImportDestination,
   VaultImportFormat,
@@ -71,6 +71,12 @@ const OPTIONS: ImportOption[] = [
     accept: ".ini,.txt",
   },
   {
+    format: "xshell",
+    label: "Xshell",
+    iconSrc: "/import/xshell.svg",
+    accept: ".xsh",
+  },
+  {
     format: "ssh_config",
     label: "ssh_config",
     iconSrc: "/import/file.png",
@@ -101,12 +107,13 @@ export type ImportVaultDialogProps = {
 };
 
 type Translate = (key: string, values?: Record<string, unknown>) => string;
+type SessionFolderImportFormat = Extract<VaultImportFormat, "securecrt" | "xshell">;
 type ImportDialogStep =
   | "format"
   | "destination"
   | "ssh-mode"
   | "moba-encoding"
-  | "securecrt-source";
+  | "session-source";
 
 export function VaultImportDestinationControls({
   mode,
@@ -400,6 +407,7 @@ export const ImportVaultDialog: React.FC<ImportVaultDialogProps> = ({
   const pendingFormatRef = useRef<VaultImportFormat | null>(null);
   const pendingOptionsRef = useRef<ImportOptions | undefined>(undefined);
   const [step, setStep] = useState<ImportDialogStep>("format");
+  const [sessionSourceFormat, setSessionSourceFormat] = useState<SessionFolderImportFormat>("securecrt");
   const [destinationMode, setDestinationMode] =
     useState<VaultImportDestinationMode>("preserve");
   const [existingGroup, setExistingGroup] = useState(groups[0] ?? "");
@@ -466,11 +474,11 @@ export const ImportVaultDialog: React.FC<ImportVaultDialogProps> = ({
       format: VaultImportFormat,
       accept: string,
       options?: ImportOptions,
-      secureCrtSource: "folder" | "file" = "folder",
+      sessionSource: "folder" | "file" = "folder",
     ) => {
       const input = fileInputRef.current;
       if (!input || !destination) return;
-      const pickerMode = getVaultImportPickerMode(format, secureCrtSource);
+      const pickerMode = getVaultImportPickerMode(format, sessionSource);
       pendingFormatRef.current = format;
       pendingOptionsRef.current = { ...options, destination };
       input.accept = accept;
@@ -494,8 +502,9 @@ export const ImportVaultDialog: React.FC<ImportVaultDialogProps> = ({
         setStep("ssh-mode");
       } else if (opt.format === "mobaxterm") {
         setStep("moba-encoding");
-      } else if (opt.format === "securecrt") {
-        setStep("securecrt-source");
+      } else if (vaultImportKeepsDistinctSessionFiles(opt.format)) {
+        setSessionSourceFormat(opt.format as SessionFolderImportFormat);
+        setStep("session-source");
       } else {
         pickFile(opt.format, opt.accept);
       }
@@ -522,12 +531,17 @@ export const ImportVaultDialog: React.FC<ImportVaultDialogProps> = ({
     [mobaMasterPassword, pickFile],
   );
 
-  const handleSecureCrtChoice = useCallback(
+  const handleSessionSourceChoice = useCallback(
     (source: "folder" | "file") => {
       setStep("format");
-      pickFile("securecrt", ".ini", undefined, source);
+      pickFile(
+        sessionSourceFormat,
+        sessionSourceFormat === "xshell" ? ".xsh" : ".ini",
+        undefined,
+        source,
+      );
     },
-    [pickFile],
+    [pickFile, sessionSourceFormat],
   );
 
   const onChangeFile = useCallback(
@@ -582,10 +596,10 @@ export const ImportVaultDialog: React.FC<ImportVaultDialogProps> = ({
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-muted/60 text-muted-foreground">
                   <FolderTree className="h-6 w-6" />
                 </div>
-              ) : step === "securecrt-source" ? (
+              ) : step === "session-source" ? (
                 <div className="mx-auto flex h-14 w-14 items-center justify-center">
                   <img
-                    src="/import/securecrt.png"
+                    src={sessionSourceFormat === "xshell" ? "/import/xshell.svg" : "/import/securecrt.png"}
                     alt=""
                     className="h-10 w-10 object-contain"
                   />
@@ -599,14 +613,14 @@ export const ImportVaultDialog: React.FC<ImportVaultDialogProps> = ({
                   />
                 </div>
               )}
-              <DialogTitle className={step === "destination" || step === "securecrt-source" ? "text-lg" : "text-xl"}>
-                {step === "securecrt-source"
-                  ? t("vault.import.securecrt.promptTitle")
+              <DialogTitle className={step === "destination" || step === "session-source" ? "text-lg" : "text-xl"}>
+                {step === "session-source"
+                  ? t(`vault.import.${sessionSourceFormat}.promptTitle`)
                   : step === "destination"
                     ? t("vault.import.destination.settings")
                     : t("vault.import.title")}
               </DialogTitle>
-              {step !== "destination" && step !== "securecrt-source" && (
+              {step !== "destination" && step !== "session-source" && (
                 <DialogDescription className="mx-auto max-w-xl">
                   {step === "ssh-mode"
                     ? t("vault.import.sshConfig.chooseMode")
@@ -879,11 +893,12 @@ export const ImportVaultDialog: React.FC<ImportVaultDialogProps> = ({
                     {t("common.back")}
                   </button>
                 </>
-              ) : step === "securecrt-source" ? (
+              ) : step === "session-source" ? (
                 <>
                   <div
                     className="grid grid-cols-2 gap-3"
-                    data-import-securecrt-prompt="true"
+                    data-import-session-source-prompt="true"
+                    data-import-securecrt-prompt={sessionSourceFormat === "securecrt" ? "true" : undefined}
                   >
                     <button
                       type="button"
@@ -892,16 +907,16 @@ export const ImportVaultDialog: React.FC<ImportVaultDialogProps> = ({
                         "px-3 py-5 hover:bg-primary/10 hover:border-primary transition-colors",
                         "flex flex-col items-center gap-2.5",
                       )}
-                      onClick={() => handleSecureCrtChoice("folder")}
+                      onClick={() => handleSessionSourceChoice("folder")}
                     >
                       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
                         <FolderOpen className="h-5 w-5 text-primary" />
                       </div>
                       <div className="text-sm font-medium text-foreground">
-                        {t("vault.import.securecrt.folder")}
+                        {t(`vault.import.${sessionSourceFormat}.folder`)}
                       </div>
                       <div className="text-xs leading-4 text-muted-foreground text-center">
-                        {t("vault.import.securecrt.folderDesc")}
+                        {t(`vault.import.${sessionSourceFormat}.folderDesc`)}
                       </div>
                     </button>
                     <button
@@ -911,19 +926,24 @@ export const ImportVaultDialog: React.FC<ImportVaultDialogProps> = ({
                         "px-3 py-5 hover:bg-muted/30 hover:border-border transition-colors",
                         "flex flex-col items-center gap-2.5",
                       )}
-                      onClick={() => handleSecureCrtChoice("file")}
+                      onClick={() => handleSessionSourceChoice("file")}
                     >
                       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted/60">
                         <FileText className="h-5 w-5 text-muted-foreground" />
                       </div>
                       <div className="text-sm font-medium text-foreground">
-                        {t("vault.import.securecrt.file")}
+                        {t(`vault.import.${sessionSourceFormat}.file`)}
                       </div>
                       <div className="text-xs leading-4 text-muted-foreground text-center">
-                        {t("vault.import.securecrt.fileDesc")}
+                        {t(`vault.import.${sessionSourceFormat}.fileDesc`)}
                       </div>
                     </button>
                   </div>
+                  {sessionSourceFormat === "xshell" && (
+                    <p className="text-center text-xs text-muted-foreground leading-5">
+                      {t("vault.import.xshell.decryptHint")}
+                    </p>
+                  )}
                   <button
                     type="button"
                     onClick={() => setStep("format")}
@@ -985,7 +1005,7 @@ export const ImportVaultDialog: React.FC<ImportVaultDialogProps> = ({
                     {t("vault.import.chooseFormat")}
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {OPTIONS.map((opt) => (
                       <button
                         key={opt.format}
