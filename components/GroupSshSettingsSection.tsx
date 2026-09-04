@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, FileKey, FolderOpen,
 import { AlgorithmOverridesPanel } from "./host-details/AlgorithmOverridesPanel";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { HostDetailsSection, HostDetailsSettingRow } from "./host-details";
+import { HostDetailsSection, HostDetailsSettingRow, StartupCommandFields } from "./host-details";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Combobox } from "./ui/combobox";
 import { Dropdown, DropdownContent, DropdownTrigger } from "./ui/dropdown";
@@ -11,7 +11,6 @@ import { Input } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Switch } from "./ui/switch";
-import { Textarea } from "./ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,6 +47,7 @@ export const GroupSshSettingsSection: React.FC<GroupSshSettingsSectionProps> = (
   inheritedLegacyAlgorithms,
   inheritedSkipEcdsaHostKey,
   inheritedStartupCommandRunMode,
+  inheritedStartupCommandRules,
   showAlgorithmOverrides,
   setShowAlgorithmOverrides,
   inheritedAlgorithmOverrides,
@@ -395,35 +395,17 @@ export const GroupSshSettingsSection: React.FC<GroupSshSettingsSectionProps> = (
               onToggle={() => update("agentForwarding", !form.agentForwarding)}
             />
 
-            {/* Startup Command — Textarea so multi-line sequences are typeable
-                here just like on the per-host details panel (#1083 follow-up). */}
-            <Textarea
-              placeholder={t("hostDetails.startupCommand.placeholder")}
-              value={form.startupCommand || ""}
-              onChange={(e) => update("startupCommand", e.target.value || undefined)}
-              className="min-h-[80px] font-mono text-sm"
-              rows={3}
+            <StartupCommandFields
+              t={t}
+              command={form.startupCommand || ""}
+              runMode={effectiveStartupCommandRunMode}
+              rules={form.startupCommandRules ?? inheritedStartupCommandRules ?? []}
+              inheritedRunMode={startupCommandRunModeFallback}
+              commandPlaceholder={t("hostDetails.startupCommand.placeholder")}
+              onCommandChange={(value) => update("startupCommand", value)}
+              onRunModeChange={(value) => update("startupCommandRunMode", value)}
+              onRulesChange={(rules) => update("startupCommandRules", rules)}
             />
-            <HostDetailsSettingRow
-              label={t("hostDetails.startupCommand.runMode")}
-              hint={t("hostDetails.startupCommand.runMode.help")}
-            >
-              <Select
-                value={effectiveStartupCommandRunMode}
-                onValueChange={(value) => update(
-                  "startupCommandRunMode",
-                  value === startupCommandRunModeFallback ? undefined : value,
-                )}
-              >
-                <SelectTrigger className="h-8 w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="lineDelay">{t("hostDetails.startupCommand.runMode.lineDelay")}</SelectItem>
-                  <SelectItem value="paste">{t("hostDetails.startupCommand.runMode.paste")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </HostDetailsSettingRow>
 
             {/* Display the *effective* value (this group's field falling
                 back to the resolved parent default). Same rationale as

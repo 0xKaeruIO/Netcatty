@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { netcattyBridge } from "../../infrastructure/services/netcattyBridge";
 import {
-  clearGuestShare,
   isOrgShareGuestSession,
 } from "./orgCenterShareStore";
 import type { TerminalSessionExitEvent } from "./resolveTerminalSessionExitIntent";
@@ -204,10 +203,15 @@ export const useTerminalBackend = () => {
   const writeToSession = useCallback((sessionId: string, data: string, options?: Parameters<NonNullable<NetcattyBridge["writeToSession"]>>[2]) => {
     const bridge = netcattyBridge.get();
     if (isOrgShareGuestSession(sessionId)) {
+      const sendGuestInput = bridge?.orgCenterShareGuestInput;
+      if (typeof sendGuestInput !== "function") {
+        console.error("[orgCenterShare] guest input unavailable", sessionId);
+        return;
+      }
       try {
-        bridge?.orgCenterShareGuestInput?.(sessionId, data);
+        sendGuestInput(sessionId, data);
       } catch (err) {
-        console.warn("[orgCenterShare] guest input failed", err);
+        console.error("[orgCenterShare] guest input failed", err);
       }
       return;
     }
@@ -217,10 +221,15 @@ export const useTerminalBackend = () => {
   const interruptSession = useCallback((sessionId: string, trace?: NetcattyTerminalInterruptTrace) => {
     const bridge = netcattyBridge.get();
     if (isOrgShareGuestSession(sessionId)) {
+      const sendGuestInput = bridge?.orgCenterShareGuestInput;
+      if (typeof sendGuestInput !== "function") {
+        console.error("[orgCenterShare] guest interrupt unavailable", sessionId);
+        return;
+      }
       try {
-        bridge?.orgCenterShareGuestInput?.(sessionId, "\x03");
+        sendGuestInput(sessionId, "\x03");
       } catch (err) {
-        console.warn("[orgCenterShare] guest interrupt failed", err);
+        console.error("[orgCenterShare] guest interrupt failed", err);
       }
       return;
     }
@@ -300,12 +309,8 @@ export const useTerminalBackend = () => {
   const closeSession = useCallback(async (sessionId: string, options?: { bootEpoch?: number }) => {
     const bridge = netcattyBridge.get();
     if (isOrgShareGuestSession(sessionId)) {
-      try {
-        await bridge?.orgCenterShareLeave?.(sessionId);
-      } catch (err) {
-        console.warn("[orgCenterShare] guest leave failed", err);
-      }
-      clearGuestShare(sessionId);
+      // Display teardown / boot abort must not leave. Tab close leaves from
+      // useSessionState.closeSessions so StrictMode remount cannot race join.
       return;
     }
     await bridge?.closeSession?.(sessionId, options);

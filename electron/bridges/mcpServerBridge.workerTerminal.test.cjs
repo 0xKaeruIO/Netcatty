@@ -686,3 +686,105 @@ test("terminal close cancels a worker job start that finishes late", async () =>
     "netcatty:ai:jobStop",
   ]);
 });
+
+test("MCP terminal_execute uses the org-share guest path instead of the worker", async () => {
+  const {
+    bindShareRuntime,
+    encodePayload,
+  } = require("./orgCenterShareBridge.cjs");
+  const sent = [];
+  const share = {
+    ws: {
+      readyState: WebSocket.OPEN,
+      send(raw) {
+        sent.push(JSON.parse(raw));
+      },
+    },
+  };
+  bindShareRuntime({ guestShares: new Map([["guest-1", share]]) });
+  try {
+    const requests = [];
+    const bridge = loadFreshBridge();
+    bridge.init({
+      sessions: new Map(),
+      electronModule: null,
+      terminalWorkerManager: {
+        request(channel) {
+          requests.push(channel);
+          throw new Error(`worker should not execute org-share guest commands: ${channel}`);
+        },
+      },
+    });
+    bridge.setPermissionMode("auto");
+    bridge.setCommandBlocklist([]);
+    bridge.setCommandTimeout(5);
+    bridge.updateSessionMetadata([
+      {
+        sessionId: "guest-1",
+        hostname: "shared",
+        protocol: "ssh",
+        connected: true,
+      },
+    ], "chat-1");
+
+    const pending = bridge.dispatchBuiltinRpc("netcatty/exec", {
+      sessionId: "guest-1",
+      command: "pwd",
+      chatSessionId: "chat-1",
+    });
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].data, encodePayload("pwd\r"));
+    for (const listener of share.outputListeners) listener("/home/guest\n");
+    const result = await pending;
+    assert.deepEqual(result, {
+      ok: true,
+      stdout: "/home/guest\n",
+      stderr: "",
+      exitCode: null,
+    });
+    assert.deepEqual(requests, []);
+  } finally {
+    bindShareRuntime(null);
+  }
+});
+
+test("MCP terminal_start rejects org-share guest sessions instead of proxying a worker job", async () => {
+  const { bindShareRuntime, GUEST_BACKGROUND_JOB_ERROR } = require("./orgCenterShareBridge.cjs");
+  bindShareRuntime({
+    guestShares: new Map([["guest-1", { ws: { readyState: WebSocket.OPEN, send() {} } }]]),
+  });
+  try {
+    const requests = [];
+    const bridge = loadFreshBridge();
+    bridge.init({
+      sessions: new Map(),
+      electronModule: null,
+      terminalWorkerManager: {
+        request(channel) {
+          requests.push(channel);
+          throw new Error(`worker should not start org-share guest jobs: ${channel}`);
+        },
+      },
+    });
+    bridge.setPermissionMode("auto");
+    bridge.setCommandBlocklist([]);
+    bridge.updateSessionMetadata([
+      {
+        sessionId: "guest-1",
+        hostname: "shared",
+        protocol: "ssh",
+        connected: true,
+      },
+    ], "chat-1");
+
+    const result = await bridge.dispatchBuiltinRpc("netcatty/jobStart", {
+      sessionId: "guest-1",
+      command: "sleep 30",
+      chatSessionId: "chat-1",
+    });
+    assert.deepEqual(result, { ok: false, error: GUEST_BACKGROUND_JOB_ERROR });
+    assert.deepEqual(requests, []);
+  } finally {
+    bindShareRuntime(null);
+  }
+});

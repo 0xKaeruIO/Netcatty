@@ -14,6 +14,7 @@ export type { ChainPanelProps } from './ChainPanel';
 
 export { EnvVarsPanel } from './EnvVarsPanel';
 export type { EnvVarsPanelProps } from './EnvVarsPanel';
+export { StartupCommandFields } from './StartupCommandFields';
 
 export {
   HostDetailsHelp,

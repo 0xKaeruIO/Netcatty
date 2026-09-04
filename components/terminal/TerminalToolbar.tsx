@@ -15,6 +15,7 @@ import {
   Highlighter,
   History,
   Languages,
+  Maximize2,
   MoreVertical,
   Palette,
   Search,
@@ -34,6 +35,7 @@ import { ScriptsSidePanel } from '../ScriptsSidePanel';
 import { VaultDeleteConfirmDialog } from '../vault/VaultDeleteConfirmDialog';
 import { Button } from '../ui/button';
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Switch } from '../ui/switch';
 import { ToolbarCustomizeContextMenu } from '../ui/toolbar-item-layout';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { toast } from '../ui/toast';
@@ -127,9 +129,21 @@ export interface TerminalToolbarProps {
   onStartRecording?: () => void;
   isOrgShareGuest?: boolean;
   orgShareCenters?: Array<{ id: string; name: string }>;
-  orgShare?: { status: 'starting' | 'active'; pin: string } | null;
+  orgShare?: {
+    status: 'starting' | 'active';
+    pin: string;
+    ptyCols?: number;
+    ptyRows?: number;
+    localCols?: number;
+    localRows?: number;
+    peerCols?: number;
+    peerRows?: number;
+    sizeSource?: 'self' | 'peer' | 'mixed' | 'matched' | 'self-only';
+    scaleToFit?: boolean;
+  } | null;
   onStartOrgShare?: (centerId: string) => void;
   onStopOrgShare?: () => void;
+  onToggleShareScaleToFit?: () => void;
 }
 
 export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
@@ -170,6 +184,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
   orgShare = null,
   onStartOrgShare,
   onStopOrgShare,
+  onToggleShareScaleToFit,
 }) => {
   const { t } = useI18n();
   const terminalContext = buildTerminalPluginContributionContext({
@@ -253,7 +268,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
       'terminalSettings',
     ];
     if (!isOrgShareGuest) ids.push('scripts');
-    if (!isOrgShareGuest && status === 'connected' && orgShareCenters.length > 0 && onStartOrgShare && onStopOrgShare) {
+    if (isOrgShareGuest || (status === 'connected' && orgShareCenters.length > 0 && onStartOrgShare && onStopOrgShare)) {
       ids.push('share');
     }
     if (!hidesSftp && !isOrgShareGuest) ids.push('sftp');
@@ -285,8 +300,10 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
   const itemLabels = useMemo(
     (): Record<TerminalToolbarItemId, string> => ({
       highlight: t('terminal.toolbar.hostHighlight.title'),
-      share: orgShare?.status === 'active'
-        ? t('terminal.toolbar.stopShare')
+      share: orgShare?.status === 'active' || isOrgShareGuest
+        ? (orgShare?.ptyCols && orgShare?.ptyRows
+          ? t('terminal.share.ptySize', { cols: orgShare.ptyCols, rows: orgShare.ptyRows })
+          : t('terminal.toolbar.stopShare'))
         : t('terminal.toolbar.startShare'),
       sftp: t('terminal.toolbar.openSftp'),
       ymodemSend: t('terminal.toolbar.sendYmodem'),
@@ -303,7 +320,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
       recording: t('scripts.recording.start'),
       encoding: t('terminal.toolbar.encoding'),
     }),
-    [isSessionLogging, orgShare?.status, t],
+    [isSessionLogging, orgShare?.status, orgShare?.ptyCols, orgShare?.ptyRows, isOrgShareGuest, t],
   );
 
   const itemIcons = useMemo(
@@ -543,9 +560,39 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
           setSharePopoverOpen(false);
           void onStartOrgShare?.(nextId);
         };
+        const sizeSourceKey = ({
+          self: 'terminal.share.sizeFromSelf',
+          peer: 'terminal.share.sizeFromPeer',
+          mixed: 'terminal.share.sizeFromMixed',
+          matched: 'terminal.share.sizeMatched',
+          'self-only': 'terminal.share.sizeFromSelf',
+        } as const)[orgShare?.sizeSource ?? 'matched'];
+        const shareSizeBlock = (sharing || isOrgShareGuest) && orgShare?.ptyCols && orgShare?.ptyRows ? (
+          <div className="space-y-1 px-2 py-1.5 text-[11px] text-muted-foreground">
+            <div className="font-medium text-foreground">
+              {t('terminal.share.ptySize', { cols: orgShare.ptyCols, rows: orgShare.ptyRows })}
+            </div>
+            <div>{t(sizeSourceKey, { cols: orgShare.ptyCols, rows: orgShare.ptyRows })}</div>
+            {orgShare.localCols && orgShare.localRows ? (
+              <div>{t('terminal.share.selfCapacity', { cols: orgShare.localCols, rows: orgShare.localRows })}</div>
+            ) : null}
+            {orgShare.peerCols && orgShare.peerRows ? (
+              <div>{t('terminal.share.peerCapacity', { cols: orgShare.peerCols, rows: orgShare.peerRows })}</div>
+            ) : null}
+            <label className="flex items-center gap-2 pt-1 text-foreground">
+              <Switch
+                checked={Boolean(orgShare.scaleToFit)}
+                onCheckedChange={() => onToggleShareScaleToFit?.()}
+                aria-label={t('terminal.share.scaleToFit')}
+              />
+              <Maximize2 size={12} className="shrink-0" />
+              <span className="flex-1 leading-tight">{t('terminal.share.scaleToFit')}</span>
+            </label>
+          </div>
+        ) : null;
         // Idle + one center: click the icon itself. A tooltip that repeats
         // "Start sharing" looks like a dialog and swallows the first click.
-        if (!sharing && orgShareCenters.length <= 1) {
+        if (!sharing && !isOrgShareGuest && orgShareCenters.length <= 1) {
           return (
             <Button
               key={id}
@@ -571,36 +618,47 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
                 type="button"
                 variant="secondary"
                 size="icon"
-                className={cn(buttonBase, (sharing || starting) && 'text-primary')}
-                aria-label={sharing ? t('terminal.toolbar.stopShare') : t('terminal.toolbar.startShare')}
+                className={cn(buttonBase, (sharing || starting || isOrgShareGuest) && 'text-primary')}
+                aria-label={
+                  isOrgShareGuest
+                    ? t('terminal.share.sizeTitle')
+                    : sharing
+                      ? t('terminal.toolbar.stopShare')
+                      : t('terminal.toolbar.startShare')
+                }
                 disabled={status !== 'connected'}
-                style={sharing || starting ? activeButtonStyle : undefined}
+                style={sharing || starting || isOrgShareGuest ? activeButtonStyle : undefined}
               >
                 <Share2 size={12} />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-52 p-1" align="end">
-              {sharing ? (
+            <PopoverContent className="w-64 p-1" align="end">
+              {sharing || isOrgShareGuest ? (
                 <div className="space-y-1 p-1">
-                  <button
-                    type="button"
-                    className={menuItemClass}
-                    onClick={() => { void copyPin(); }}
-                  >
-                    <Copy size={12} className="shrink-0" />
-                    <span className="flex-1 text-left font-mono tracking-[0.3em]">{pin}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={menuItemClass}
-                    onClick={() => {
-                      setSharePopoverOpen(false);
-                      onStopOrgShare?.();
-                    }}
-                  >
-                    <X size={12} className="shrink-0" />
-                    <span className="flex-1 text-left truncate">{t('terminal.toolbar.stopShare')}</span>
-                  </button>
+                  {shareSizeBlock}
+                  {!isOrgShareGuest && pin ? (
+                    <button
+                      type="button"
+                      className={menuItemClass}
+                      onClick={() => { void copyPin(); }}
+                    >
+                      <Copy size={12} className="shrink-0" />
+                      <span className="flex-1 text-left font-mono tracking-[0.3em]">{pin}</span>
+                    </button>
+                  ) : null}
+                  {!isOrgShareGuest ? (
+                    <button
+                      type="button"
+                      className={menuItemClass}
+                      onClick={() => {
+                        setSharePopoverOpen(false);
+                        onStopOrgShare?.();
+                      }}
+                    >
+                      <X size={12} className="shrink-0" />
+                      <span className="flex-1 text-left truncate">{t('terminal.toolbar.stopShare')}</span>
+                    </button>
+                  ) : null}
                 </div>
               ) : (
                 orgShareCenters.map((center) => (

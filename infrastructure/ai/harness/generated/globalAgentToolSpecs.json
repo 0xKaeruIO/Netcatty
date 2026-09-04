@@ -758,7 +758,12 @@
       "startupCommandRunMode": {
         "type": "string",
         "optional": true,
-        "description": "paste or lineDelay."
+        "description": "paste, lineDelay, or rules."
+      },
+      "startupCommandRules": {
+        "type": "string",
+        "optional": true,
+        "description": "JSON array of {expect,send} steps for rule mode. Empty expect sends immediately. Empty array clears them."
       },
       "environmentVariables": {
         "type": "string",

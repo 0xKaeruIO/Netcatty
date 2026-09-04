@@ -80,7 +80,7 @@ import {
 import { getEffectiveKnownHosts } from '../../infrastructure/syncHelpers';
 import { toast } from '../../components/ui/toast';
 import { formatOrgCenterError } from '../i18n/formatOrgCenterError';
-import { formatOrgShareGuestLabel } from '../../domain/orgCenterShare';
+import { flipShareSizeSource, formatOrgShareGuestLabel } from '../../domain/orgCenterShare';
 import { readOrgCenterConnections } from '../state/useOrgCenterConnections';
 import {
   clearGuestShare,
@@ -88,6 +88,7 @@ import {
   getOrgCenterShareSnapshot,
   markGuestShare,
   patchGuestShare,
+  patchHostShare,
 } from '../state/orgCenterShareStore';
 import { VaultSection } from '../../components/VaultView';
 import { KeyboardInteractiveRequest } from '../../components/KeyboardInteractiveModal';
@@ -1295,10 +1296,11 @@ export function AppSideEffects() {
       });
       renameSessionInline(sessionId, label);
     } catch (err) {
+      console.error("[orgCenterShare] join failed", err);
       try {
         await netcattyBridge.get()?.orgCenterShareLeave?.(sessionId);
-      } catch {
-        // ignore
+      } catch (leaveErr) {
+        console.error("[orgCenterShare] join-failure leave failed", leaveErr);
       }
       // Remove the tab while the guest mark is still set so unmount leave
       // cannot fall through to netcatty:close / A's SSH session.
@@ -1330,9 +1332,32 @@ export function AppSideEffects() {
         return;
       }
       if (payload.type === "resize") {
+        const cols = Number(payload.cols) || undefined;
+        const rows = Number(payload.rows) || undefined;
+        const source = payload.source as
+          | "self"
+          | "peer"
+          | "mixed"
+          | "matched"
+          | "self-only"
+          | undefined;
+        patchHostShare(sessionId, {
+          ptyCols: cols,
+          ptyRows: rows,
+          sizeSource: source,
+          localCols: Number(payload.hostCols) || undefined,
+          localRows: Number(payload.hostRows) || undefined,
+          peerCols: Number(payload.guestCols) || undefined,
+          peerRows: Number(payload.guestRows) || undefined,
+        });
         patchGuestShare(sessionId, {
-          cols: Number(payload.cols) || undefined,
-          rows: Number(payload.rows) || undefined,
+          cols,
+          rows,
+          sizeSource: flipShareSizeSource(source),
+          peerCols: Number(payload.hostCols) || undefined,
+          peerRows: Number(payload.hostRows) || undefined,
+          localCols: Number(payload.guestCols) || undefined,
+          localRows: Number(payload.guestRows) || undefined,
         });
         return;
       }

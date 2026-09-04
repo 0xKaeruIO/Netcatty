@@ -154,7 +154,7 @@ test("shows share only when connected with an organization center", () => {
 test("a single organization center starts sharing from the toolbar button click", () => {
   assert.match(
     toolbarSource,
-    /if \(!sharing && orgShareCenters\.length <= 1\)/,
+    /if \(!sharing && !isOrgShareGuest && orgShareCenters\.length <= 1\)/,
   );
   assert.match(toolbarSource, /onClick=\{\(\) => startShare\(\)\}/);
 });
@@ -164,6 +164,26 @@ test("disables SFTP while the current session is being shared", () => {
     orgShare: { status: "active", pin: "123456" },
   });
   assert.match(markup, /aria-label="Open SFTP"[^>]*disabled/);
+});
+
+test("shows shared PTY size and scale-to-fill while sharing", () => {
+  assert.match(toolbarSource, /terminal\.share\.ptySize/);
+  assert.match(toolbarSource, /terminal\.share\.scaleToFit/);
+  assert.match(toolbarSource, /terminal\.share\.sizeFromPeer/);
+  const markup = renderToolbar(sshHost, "connected", {
+    orgShareCenters: [{ id: "c1", name: "Lab" }],
+    orgShare: {
+      status: "active",
+      pin: "123456",
+      ptyCols: 80,
+      ptyRows: 24,
+      sizeSource: "peer",
+    },
+    onStartOrgShare: () => {},
+    onStopOrgShare: () => {},
+    onToggleShareScaleToFit: () => {},
+  });
+  assert.match(markup, /aria-label="Stop sharing"/);
 });
 
 test("shows YMODEM send only for connected serial sessions", () => {

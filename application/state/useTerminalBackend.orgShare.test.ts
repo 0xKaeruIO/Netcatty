@@ -15,16 +15,23 @@ test("guest input is routed to the share bridge, not the local PTY write", () =>
   assert.ok(guestWriteIndex < shareInputIndex && shareInputIndex < localWriteIndex);
 });
 
-test("guest close leaves the share instead of closing the host SSH session", () => {
+test("guest boot closeSession does not leave the share or close host SSH", () => {
   const source = readFileSync(new URL("./useTerminalBackend.ts", import.meta.url), "utf8");
   const closeIndex = source.indexOf("const closeSession = useCallback");
   const guestCloseIndex = source.indexOf("isOrgShareGuestSession(sessionId)", closeIndex);
-  const leaveIndex = source.indexOf("orgCenterShareLeave", guestCloseIndex);
-  const backendCloseIndex = source.indexOf("bridge?.closeSession", leaveIndex);
+  const backendCloseIndex = source.indexOf("bridge?.closeSession", closeIndex);
   assert.notEqual(closeIndex, -1);
   assert.notEqual(guestCloseIndex, -1);
-  assert.notEqual(leaveIndex, -1);
   assert.notEqual(backendCloseIndex, -1);
-  assert.ok(guestCloseIndex < leaveIndex && leaveIndex < backendCloseIndex);
-  assert.match(source.slice(guestCloseIndex, backendCloseIndex), /return;/);
+  const guestBranch = source.slice(guestCloseIndex, backendCloseIndex);
+  assert.match(guestBranch, /return;/);
+  assert.doesNotMatch(guestBranch, /orgCenterShareLeave/);
+});
+
+test("guest input failures are logged to the console", () => {
+  const source = readFileSync(new URL("./useTerminalBackend.ts", import.meta.url), "utf8");
+  const writeIndex = source.indexOf("const writeToSession = useCallback");
+  const writeBody = source.slice(writeIndex, source.indexOf("const interruptSession", writeIndex));
+  assert.match(writeBody, /console\.error\("\[orgCenterShare\] guest input unavailable"/);
+  assert.match(writeBody, /console\.error\("\[orgCenterShare\] guest input failed"/);
 });

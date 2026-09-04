@@ -31,6 +31,12 @@ export interface HostChainConfig {
 }
 
 export type MultiLineRunMode = 'lineDelay' | 'paste';
+export type StartupCommandRunMode = MultiLineRunMode | 'rules';
+
+export interface StartupCommandRule {
+  expect: string;
+  send: string;
+}
 
 // Per-host SSH algorithm override lists (advanced). Each property, when
 // present and non-empty, fully replaces the offered list for that category.
@@ -194,7 +200,8 @@ export interface Host {
   x11Forwarding?: boolean;
   createdAt?: number; // Timestamp when host was created
   startupCommand?: string;
-  startupCommandRunMode?: MultiLineRunMode;
+  startupCommandRunMode?: StartupCommandRunMode;
+  startupCommandRules?: StartupCommandRule[];
   /** Script id (kind=script) to run automatically after connect. */
   loginScriptId?: string;
   /** Ordered onConnect script IDs for this host (canonical run order). */
@@ -419,7 +426,8 @@ export interface GroupConfig {
   proxyConfig?: ProxyConfig;
   hostChain?: HostChainConfig;
   startupCommand?: string;
-  startupCommandRunMode?: MultiLineRunMode;
+  startupCommandRunMode?: StartupCommandRunMode;
+  startupCommandRules?: StartupCommandRule[];
   loginScriptId?: string;
   legacyAlgorithms?: boolean;
   skipEcdsaHostKey?: boolean;

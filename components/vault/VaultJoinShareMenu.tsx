@@ -43,8 +43,8 @@ export function VaultJoinShareMenu({
       await onJoinShare?.(selected.id, nextPin);
       setPin("");
       setOpen(false);
-    } catch {
-      // Join errors are toasted by the app join handler.
+    } catch (err) {
+      console.error("[orgCenterShare] join share failed", err);
     } finally {
       setJoining(false);
     }

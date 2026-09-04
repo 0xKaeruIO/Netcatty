@@ -61,12 +61,19 @@ import {
   clearHostShare,
   markHostShareActive,
   markHostShareStarting,
+  patchGuestShare,
+  patchHostShare,
+  setOrgShareScaleToFit,
   useOrgCenterGuestShare,
   useOrgCenterHostShare,
 } from "../application/state/orgCenterShareStore";
 import { useOrgCenterConnections } from "../application/state/useOrgCenterConnections";
 import { formatOrgCenterError } from "../application/i18n/formatOrgCenterError";
-import { ORG_SHARE_FILE_TRANSFER_MESSAGE_KEY } from "../domain/orgCenterShare";
+import {
+  computeShareFillScale,
+  ORG_SHARE_FILE_TRANSFER_MESSAGE_KEY,
+  proposeShareCapacity,
+} from "../domain/orgCenterShare";
 import { netcattyBridge } from "../infrastructure/services/netcattyBridge";
 import {
   TERMINAL_AUTO_RECONNECT_DELAY_MS,
@@ -829,25 +836,51 @@ const TerminalComponent: React.FC<TerminalProps> = ({
   const hostShare = useOrgCenterHostShare(sessionId);
   const guestShare = useOrgCenterGuestShare(sessionId);
   const isOrgShareGuest = orgShareRole === "guest";
+  const lockOrgShareGrid = isOrgShareGuest || hostShare?.status === "active";
+  const shareScaleToFit = Boolean((isOrgShareGuest ? guestShare : hostShare)?.scaleToFit);
+  const [shareFillScale, setShareFillScale] = useState(1);
+  const shareFillScaleRef = useRef(1);
+  shareFillScaleRef.current = shareFillScale;
+  const shareScaleToFitRef = useRef(false);
+  shareScaleToFitRef.current = shareScaleToFit;
+  const lockOrgShareGridRef = useRef(false);
+  lockOrgShareGridRef.current = lockOrgShareGrid;
+  const orgSharePtyRef = useRef<{ cols: number; rows: number } | null>(null);
+  const shareCapacityTimerRef = useRef<number | null>(null);
+  const lastShareCapacityRef = useRef<{ cols: number; rows: number } | null>(null);
   const orgShareCenters = useMemo(
     () => orgCenterConnections.map((connection) => ({ id: connection.id, name: connection.name })),
     [orgCenterConnections],
   );
 
   useEffect(() => {
-    if (!isOrgShareGuest) return;
-    const cols = guestShare?.cols;
-    const rows = guestShare?.rows;
+    const cols = isOrgShareGuest ? guestShare?.cols : hostShare?.ptyCols;
+    const rows = isOrgShareGuest ? guestShare?.rows : hostShare?.ptyRows;
+    orgSharePtyRef.current = cols && rows ? { cols, rows } : null;
+    if (!lockOrgShareGrid) {
+      if (shareFillScaleRef.current !== 1) {
+        shareFillScaleRef.current = 1;
+        setShareFillScale(1);
+      }
+      return;
+    }
     if (!cols || !rows) return;
     const term = termRef.current;
     if (!term) return;
     if (term.cols === cols && term.rows === rows) return;
     try {
       term.resize(cols, rows);
-    } catch {
-      // Guest display size is best-effort.
+    } catch (err) {
+      console.error("[orgCenterShare] locked grid resize failed", err);
     }
-  }, [guestShare?.cols, guestShare?.rows, isOrgShareGuest]);
+  }, [
+    guestShare?.cols,
+    guestShare?.rows,
+    hostShare?.ptyCols,
+    hostShare?.ptyRows,
+    isOrgShareGuest,
+    lockOrgShareGrid,
+  ]);
   const {
     chooseManualSessionLogPath,
     startManualSessionLog,
@@ -871,7 +904,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
 
   // isScriptsOpen state removed - scripts now handled by side panel
   const [status, setStatus] = useState<TerminalSession["status"]>(() => (
-    getInitialTerminalStatus()
+    isOrgShareGuest ? "connected" : getInitialTerminalStatus()
   ));
   const hasEverConnectedRef = useRef(status === "connected");
   const [error, setError] = useState<string | null>(null);
@@ -1716,6 +1749,14 @@ const TerminalComponent: React.FC<TerminalProps> = ({
       disposeTelnetEchoModeRef.current = null;
       telnetLocalEchoRef.current = false;
     };
+
+    // Guest WS is owned by the tab (closeSessions), not xterm boot. StrictMode
+    // remount and font/host effect re-runs must not leave the room or clear the
+    // guest mark — that races join and silently drops keyboard input.
+    if (isOrgShareGuest) {
+      disposeSessionListeners();
+      return;
+    }
 
     if (!attachExistingSession) {
       disposeSessionListeners();
@@ -2904,6 +2945,76 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     options: SafeFitOptions;
   } | null>(null);
 
+  const reportShareCapacity = (cols: number, rows: number) => {
+    if (!lockOrgShareGridRef.current) return;
+    const last = lastShareCapacityRef.current;
+    if (last && last.cols === cols && last.rows === rows) return;
+    if (shareCapacityTimerRef.current != null) {
+      window.clearTimeout(shareCapacityTimerRef.current);
+    }
+    shareCapacityTimerRef.current = window.setTimeout(() => {
+      shareCapacityTimerRef.current = null;
+      lastShareCapacityRef.current = { cols, rows };
+      try {
+        const reportCapacity = netcattyBridge.get()?.orgCenterShareReportCapacity;
+        if (typeof reportCapacity !== "function") {
+          console.error("[orgCenterShare] reportCapacity unavailable", sessionId);
+        } else {
+          reportCapacity(sessionId, cols, rows);
+        }
+      } catch (err) {
+        console.error("[orgCenterShare] reportCapacity failed", err);
+      }
+      if (isOrgShareGuest) {
+        patchGuestShare(sessionId, { localCols: cols, localRows: rows });
+      } else {
+        patchHostShare(sessionId, { localCols: cols, localRows: rows });
+      }
+    }, 200);
+  };
+
+  const applyLockedShareGrid = (term: XTerm, container: HTMLElement) => {
+    const screen = term.element?.querySelector(".xterm-screen") as HTMLElement | null;
+    const appliedScale = shareFillScaleRef.current || 1;
+    const cellWidth = screen && term.cols > 0
+      ? (screen.clientWidth / term.cols) / appliedScale
+      : 0;
+    const cellHeight = screen && term.rows > 0
+      ? (screen.clientHeight / term.rows) / appliedScale
+      : 0;
+    if (cellWidth > 0 && cellHeight > 0) {
+      const capacity = proposeShareCapacity(
+        container.clientWidth,
+        container.clientHeight,
+        cellWidth,
+        cellHeight,
+      );
+      reportShareCapacity(capacity.cols, capacity.rows);
+      const locked = orgSharePtyRef.current;
+      const scaleToFit = shareScaleToFitRef.current;
+      if (locked && scaleToFit) {
+        const nextScale = computeShareFillScale(
+          container.clientWidth,
+          container.clientHeight,
+          locked.cols * cellWidth,
+          locked.rows * cellHeight,
+        );
+        if (Math.abs(nextScale - appliedScale) > 0.02) {
+          shareFillScaleRef.current = nextScale;
+          setShareFillScale(nextScale);
+        }
+      } else if (!scaleToFit && appliedScale !== 1) {
+        shareFillScaleRef.current = 1;
+        setShareFillScale(1);
+      }
+    }
+    const locked = orgSharePtyRef.current;
+    if (locked && (term.cols !== locked.cols || term.rows !== locked.rows)) {
+      term.resize(locked.cols, locked.rows);
+      forceSyncRenderAfterResize(term);
+    }
+  };
+
   const safeFit = (options?: SafeFitOptions) => {
     const fitAddon = fitAddonRef.current;
     if (!fitAddon) return;
@@ -2937,6 +3048,13 @@ const TerminalComponent: React.FC<TerminalProps> = ({
       try {
         const term = termRef.current;
         if (!term) return;
+
+        if (lockOrgShareGridRef.current) {
+          lastFittedSizeRef.current = { width, height };
+          applyLockedShareGrid(term, container);
+          autocompleteRepositionRef.current?.();
+          return;
+        }
 
         if (hasPendingTerminalWrites(term)) {
           let pending = pendingWriteSafeFitRef.current;
@@ -3054,6 +3172,21 @@ const TerminalComponent: React.FC<TerminalProps> = ({
   };
 
   const prevIsResizingRef = useRef(isResizing);
+
+  useEffect(() => {
+    if (!lockOrgShareGrid) {
+      lastShareCapacityRef.current = null;
+      return;
+    }
+    lastShareCapacityRef.current = null;
+    safeFit({ force: true, requireVisible: true });
+  }, [lockOrgShareGrid, shareScaleToFit]);
+
+  useEffect(() => () => {
+    if (shareCapacityTimerRef.current != null) {
+      window.clearTimeout(shareCapacityTimerRef.current);
+    }
+  }, []);
 
   const disableBracketedPasteRef = useRef(terminalSettings?.disableBracketedPaste ?? false);
   disableBracketedPasteRef.current = terminalSettings?.disableBracketedPaste ?? false;
@@ -3336,10 +3469,15 @@ const TerminalComponent: React.FC<TerminalProps> = ({
         centerId: connection.id,
         pin: result.pin,
         roomId: result.roomId,
+        ptyCols: term?.cols || 80,
+        ptyRows: term?.rows || 24,
+        localCols: term?.cols || 80,
+        localRows: term?.rows || 24,
       });
       toast.success(t("terminal.share.started", { pin: result.pin }));
     } catch (err) {
       clearHostShare(sessionId);
+      console.error("[orgCenterShare] start failed", err);
       toast.error(
         formatOrgCenterError(err instanceof Error ? err.message : "", t),
         t("terminal.share.startFailed"),
@@ -3353,7 +3491,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     try {
       await netcattyBridge.get()?.orgCenterShareStop?.(sessionId);
     } catch (err) {
-      console.warn("[orgCenterShare] stop failed", err);
+      console.error("[orgCenterShare] stop failed", err);
     }
     clearHostShare(sessionId);
     toast.success(t("terminal.share.stopped"));
@@ -3842,7 +3980,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
   }, [attachExistingSession, sessionId]);
 
   const isReconnectActive = autoReconnectLoopActiveRef.current || manualReconnectActive;
-  const shouldShowConnectionDialog = shouldShowTerminalConnectionDialog({
+  const shouldShowConnectionDialog = !isOrgShareGuest && shouldShowTerminalConnectionDialog({
     status,
     isLocalConnection,
     isSerialConnection,
@@ -4059,9 +4197,34 @@ const TerminalComponent: React.FC<TerminalProps> = ({
       onSetTerminalEncoding={isOrgShareGuest ? undefined : handleSetTerminalEncoding}
       isOrgShareGuest={isOrgShareGuest}
       orgShareCenters={orgShareCenters}
-      orgShare={hostShare ? { status: hostShare.status, pin: hostShare.pin } : null}
+      orgShare={hostShare ? {
+        status: hostShare.status,
+        pin: hostShare.pin,
+        ptyCols: hostShare.ptyCols,
+        ptyRows: hostShare.ptyRows,
+        localCols: hostShare.localCols,
+        localRows: hostShare.localRows,
+        peerCols: hostShare.peerCols,
+        peerRows: hostShare.peerRows,
+        sizeSource: hostShare.sizeSource,
+        scaleToFit: Boolean(hostShare.scaleToFit),
+      } : guestShare ? {
+        status: guestShare.status === "joining" ? "starting" : "active",
+        pin: guestShare.pin,
+        ptyCols: guestShare.cols,
+        ptyRows: guestShare.rows,
+        localCols: guestShare.localCols,
+        localRows: guestShare.localRows,
+        peerCols: guestShare.peerCols,
+        peerRows: guestShare.peerRows,
+        sizeSource: guestShare.sizeSource,
+        scaleToFit: Boolean(guestShare.scaleToFit),
+      } : null}
       onStartOrgShare={handleStartOrgShare}
       onStopOrgShare={handleStopOrgShare}
+      onToggleShareScaleToFit={() => {
+        setOrgShareScaleToFit(sessionId, !((hostShare ?? guestShare)?.scaleToFit));
+      }}
       recordingIndicator={recorder.isRecording ? (
         <ScriptRecordingIndicator
           elapsedMs={recorder.elapsedMs}
@@ -4084,6 +4247,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     handleStartOrgShare,
     handleStopOrgShare,
     hostShare,
+    guestShare,
     isOrgShareGuest,
     orgShareCenters,
     handleOpenSFTP,
@@ -4458,7 +4622,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     onWake: wakeFromHibernateRuntime,
   });
 
-  useTerminalEffects({ CONNECTION_TIMEOUT, Error, XTERM_PERFORMANCE_CONFIG, applyUserCursorPreference, auth, autocompleteCloseRef, autocompleteInputRef, autocompleteKeyEventRef, autocompleteRepositionRef, captureTerminalLogData, chainHosts: resolvedChainHosts, chainProgress, clearTerminalCwd, commandBufferRef, connectionLogBufferRef, containerRef, createPromptLineBreakState, createReplaySafeTerminalLogSanitizer, createXTermRuntime, deferTerminalResizeRef, disableTerminalFontZoomRef, effectiveFontSize, effectiveFontWeight, effectiveTheme, error, executeSnippetCommand, finalizeTerminalLogData, fitAddonRef, fontFamilyId, fontSize, fontWeightFixupDoneRef, forceCloseHibernatedSession, forceSyncRenderAfterResize, handleOsc52ReadRequest, handleTerminalDataCaptureOnce, hasConnectedRef, hasRuntimeRef, host, hotkeySchemeRef, hibernatedRef, identities, inWorkspace, isBootActiveRef, bootEpochRef, isBroadcastEnabledRef, isComposeBarOpen: effectiveComposeBarOpen, isConnectionAwaitingUserInput, isConnectionPastTcpDial, isFocusMode, isFocused, isLocalConnection, isNetworkDevice, isResizing: deferTerminalResize, isRestoringSelectionRef, isSearchOpen, isSerialConnection, isVisible, isVisibleRef, keyBindingsRef, keys, kittyKeyboardProtocolEnabledForSession, knownCwdRef, lastFittedSizeRef, lastToastedErrorRef, logger, mouseTrackingRef, needsHostKeyVerification, onBroadcastInputRef, onBroadcastInterruptPriorityChange, onCommandExecuted, onCommandSubmitted: cwdAwareOnCommandSubmitted, onHotkeyActionRef, onOpenExternalError, onOutputTriggerUserInputRef: noteOutputTriggerUserInputRef, onPluginRuntimeCwdChange: pluginAwareOnRuntimeCwdChange, onSnippetShortkeyRef, onSnippetExecutorChange, onTerminalCwdChange, onTerminalTitleChange, onTerminalBell, onTerminalFontSizeChange, paneLayoutKey, passwordPromptActiveRef, pendingAuthRef, pendingOutputScrollRef, pluginDecorationRefreshRef, pluginDecorationRules, pluginDecorationRulesRef, pluginTerminalLifecycle, pluginTerminalProviderRevision, isPluginTerminalProviderAvailable, requestPluginTerminalProviders, prepareRestoredReconnect, prepareInitialCwdIntent, prevIsResizingRef, promptLineBreakStateRef, resizeSession, resolveHostAuth, resolvedFontFamily, safeFit, scriptRecorderRef: recorderRef, searchAddonRef, serialConfig, serialLineBufferRef, serializeAddonRef, sessionId, sessionRef, sessionStarters, setError, setHasMouseTracking, setIsCancelling, setIsDisconnectedDialogDismissed, requestSearchFocus, setNeedsHostKeyVerification, setPendingHostKeyInfo, setPendingHostKeyRequestId, setProgressLogs, setProgressValue, setShowLogs, setStatus, setTimeLeft, shellType, shouldEnableNativeUserInputAutoScroll, shouldProbeSessionCwd, shouldStartTerminalBackend, vaultInitialized, attachExistingSession, attachAuthorization, attachHomeWebContentsIdRef, snippetsRef, splitResizeActive: isResizing, status, statusRef, sudoAutofillRef, t, teardown, telnetLocalEchoRef, termRef, terminalAltKeyOptions, terminalBackend, terminalContextActionsRef, terminalCwdTracker, terminalDataCapturedRef, terminalLogSanitizerRef, terminalOutputHistory: terminalOutputHistoryRef.current, terminalSettings, terminalSettingsRef, terminalTitleRef, toHostKeyInfo, toast, updateStatus, useEffect, useLayoutEffect, workspaceId, xtermRuntimeRef, zmodem, zmodemToastedRef, restoreState, orgShareRole });
+  useTerminalEffects({ CONNECTION_TIMEOUT, Error, XTERM_PERFORMANCE_CONFIG, applyUserCursorPreference, auth, autocompleteCloseRef, autocompleteInputRef, autocompleteKeyEventRef, autocompleteRepositionRef, captureTerminalLogData, chainHosts: resolvedChainHosts, chainProgress, clearTerminalCwd, commandBufferRef, connectionLogBufferRef, containerRef, createPromptLineBreakState, createReplaySafeTerminalLogSanitizer, createXTermRuntime, deferTerminalResizeRef, disableTerminalFontZoomRef, effectiveFontSize: lockOrgShareGrid && shareScaleToFit ? Math.max(8, Math.round(effectiveFontSize * shareFillScale * 10) / 10) : effectiveFontSize, effectiveFontWeight, effectiveTheme, error, executeSnippetCommand, finalizeTerminalLogData, fitAddonRef, fontFamilyId, fontSize, fontWeightFixupDoneRef, forceCloseHibernatedSession, forceSyncRenderAfterResize, handleOsc52ReadRequest, handleTerminalDataCaptureOnce, hasConnectedRef, hasRuntimeRef, host, hotkeySchemeRef, hibernatedRef, identities, inWorkspace, isBootActiveRef, bootEpochRef, isBroadcastEnabledRef, isComposeBarOpen: effectiveComposeBarOpen, isConnectionAwaitingUserInput, isConnectionPastTcpDial, isFocusMode, isFocused, isLocalConnection, isNetworkDevice, isResizing: deferTerminalResize, isRestoringSelectionRef, isSearchOpen, isSerialConnection, isVisible, isVisibleRef, keyBindingsRef, keys, kittyKeyboardProtocolEnabledForSession, knownCwdRef, lastFittedSizeRef, lastToastedErrorRef, logger, mouseTrackingRef, needsHostKeyVerification, onBroadcastInputRef, onBroadcastInterruptPriorityChange, onCommandExecuted, onCommandSubmitted: cwdAwareOnCommandSubmitted, onHotkeyActionRef, onOpenExternalError, onOutputTriggerUserInputRef: noteOutputTriggerUserInputRef, onPluginRuntimeCwdChange: pluginAwareOnRuntimeCwdChange, onSnippetShortkeyRef, onSnippetExecutorChange, onTerminalCwdChange, onTerminalTitleChange, onTerminalBell, onTerminalFontSizeChange, paneLayoutKey, passwordPromptActiveRef, pendingAuthRef, pendingOutputScrollRef, pluginDecorationRefreshRef, pluginDecorationRules, pluginDecorationRulesRef, pluginTerminalLifecycle, pluginTerminalProviderRevision, isPluginTerminalProviderAvailable, requestPluginTerminalProviders, prepareRestoredReconnect, prepareInitialCwdIntent, prevIsResizingRef, promptLineBreakStateRef, resizeSession, resolveHostAuth, resolvedFontFamily, safeFit, scriptRecorderRef: recorderRef, searchAddonRef, serialConfig, serialLineBufferRef, serializeAddonRef, sessionId, sessionRef, sessionStarters, setError, setHasMouseTracking, setIsCancelling, setIsDisconnectedDialogDismissed, requestSearchFocus, setNeedsHostKeyVerification, setPendingHostKeyInfo, setPendingHostKeyRequestId, setProgressLogs, setProgressValue, setShowLogs, setStatus, setTimeLeft, shellType, shouldEnableNativeUserInputAutoScroll, shouldProbeSessionCwd, shouldStartTerminalBackend, vaultInitialized, attachExistingSession, attachAuthorization, attachHomeWebContentsIdRef, snippetsRef, splitResizeActive: isResizing, status, statusRef, sudoAutofillRef, t, teardown, telnetLocalEchoRef, termRef, terminalAltKeyOptions, terminalBackend, terminalContextActionsRef, terminalCwdTracker, terminalDataCapturedRef, terminalLogSanitizerRef, terminalOutputHistory: terminalOutputHistoryRef.current, terminalSettings, terminalSettingsRef, terminalTitleRef, toHostKeyInfo, toast, updateStatus, useEffect, useLayoutEffect, workspaceId, xtermRuntimeRef, zmodem, zmodemToastedRef, restoreState, orgShareRole, lockOrgShareGrid });
 
   return (
     <>

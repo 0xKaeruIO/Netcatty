@@ -549,8 +549,8 @@ test("manual disconnect keeps the session pane for reconnect", () => {
   assert.match(body, /void cleanupSession\(\{ retainOwnership: true \}\)/);
   assert.match(source, /trackSessionCleanup/);
   assert.doesNotMatch(body, /onCloseSession/);
-  assert.match(source, /handleDisconnect: \(attachExistingSession \|\| compactToolbar\) \? undefined : handleDisconnect/);
-  assert.match(source, /showConnectionControls: !attachExistingSession && !compactToolbar/);
+  assert.match(source, /handleDisconnect: \(attachExistingSession \|\| compactToolbar \|\| isOrgShareGuest\) \? undefined : handleDisconnect/);
+  assert.match(source, /showConnectionControls: !attachExistingSession && !compactToolbar && !isOrgShareGuest/);
   assert.match(source, /setTerminalBootEpoch/);
 
   const startersSource = readFileSync(
@@ -651,7 +651,7 @@ test("terminal boot is cancelable and closes eagerly on cleanup", () => {
     "never-connected boots must sync-dispose before leaving cleanup",
   );
   // Owner panes close the pending backend; attach popups only dispose xterm.
-  assert.match(neverConnectedBranch, /if \(!attachExistingSession\)/);
+  assert.match(neverConnectedBranch, /if \(!attachExistingSession && orgShareRole !== "guest"\)/);
   assert.match(effectsSource, /let ownedRuntime:/);
   assert.match(
     cleanup,
@@ -686,6 +686,38 @@ test("terminal boot is cancelable and closes eagerly on cleanup", () => {
   // has to reach it or the extension request outlives the pane.
   assert.match(startersSource, /options\?\.signal\?\.addEventListener\("abort", onBootAborted/);
   assert.match(startersSource, /options\?\.signal\?\.removeEventListener\("abort", onBootAborted\)/);
+});
+
+test("guest share display teardown does not leave the room", () => {
+  const terminalSource = readFileSync(new URL("../Terminal.tsx", import.meta.url), "utf8");
+  const cleanupIndex = terminalSource.indexOf("const cleanupSession = async");
+  const guestSkipIndex = terminalSource.indexOf("if (isOrgShareGuest)", cleanupIndex);
+  const closeIndex = terminalSource.indexOf("terminalBackend.closeSession", cleanupIndex);
+  assert.ok(cleanupIndex >= 0);
+  assert.ok(guestSkipIndex > cleanupIndex);
+  assert.ok(closeIndex > guestSkipIndex);
+  const guestBranch = terminalSource.slice(guestSkipIndex, closeIndex);
+  assert.match(guestBranch, /disposeSessionListeners\(\);/);
+  assert.match(guestBranch, /return;/);
+  assert.doesNotMatch(guestBranch, /orgCenterShareLeave/);
+
+  const sessionSource = readFileSync(
+    new URL("../../application/state/useSessionState.ts", import.meta.url),
+    "utf8",
+  );
+  const leaveHelperIndex = sessionSource.indexOf("function leaveOrgShareGuestSessions");
+  const closeSessionsIndex = sessionSource.indexOf("const closeSessions = useCallback");
+  const closeWorkspaceIndex = sessionSource.indexOf("const closeWorkspace = useCallback");
+  assert.ok(leaveHelperIndex >= 0);
+  assert.ok(closeSessionsIndex > leaveHelperIndex);
+  assert.match(
+    sessionSource.slice(closeSessionsIndex, closeSessionsIndex + 400),
+    /leaveOrgShareGuestSessions\(sessionIds\)/,
+  );
+  assert.match(
+    sessionSource.slice(closeWorkspaceIndex, closeWorkspaceIndex + 500),
+    /leaveOrgShareGuestSessions\(closedIds\)/,
+  );
 });
 
 test("hidden host information reveals actions without permanently covering terminal content", () => {

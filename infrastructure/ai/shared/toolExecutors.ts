@@ -59,6 +59,17 @@ function isObserver(mode: AIPermissionMode): boolean {
   return mode === 'observer';
 }
 
+function resolveReportedExitCode(
+  result: { exitCode?: number | null },
+  isNetworkDevice: boolean,
+): number | null {
+  // Explicit null means the runtime has no exit status (serial/network CLI,
+  // or org-share guest PTY). Keep it so the model does not see a fake -1.
+  if (result.exitCode === null) return null;
+  if (isNetworkDevice) return result.exitCode ?? null;
+  return result.exitCode ?? -1;
+}
+
 // ---------------------------------------------------------------------------
 // Tool executors
 // ---------------------------------------------------------------------------
@@ -102,7 +113,7 @@ export async function executeTerminalExecute(
       data: {
         stdout: result.stdout || '',
         stderr: result.stderr || '',
-        exitCode: isNetworkDevice ? (result.exitCode ?? null) : (result.exitCode ?? -1),
+        exitCode: resolveReportedExitCode(result, isNetworkDevice),
       },
     };
   }
@@ -115,7 +126,7 @@ export async function executeTerminalExecute(
     data: {
       stdout: result.stdout || '',
       stderr: result.stderr || '',
-      exitCode: isNetworkDevice ? (result.exitCode ?? null) : (result.exitCode ?? -1),
+      exitCode: resolveReportedExitCode(result, isNetworkDevice),
     },
   };
 }

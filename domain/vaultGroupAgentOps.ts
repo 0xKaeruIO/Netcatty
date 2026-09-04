@@ -1,5 +1,6 @@
 import type { GroupConfig, Host, Identity, ManagedSource, ProxyProfile } from './models';
 import { applyGroupDefaults, resolveGroupDefaults } from './groupConfig';
+import { parseStartupCommandRulesInput } from './startupCommandRules';
 import {
   findIntroducedVaultJumpGraphIssue,
   findVaultGroupConfigJumpReference,
@@ -126,6 +127,17 @@ export function patchGroupConfig(
     }
   }
   if (Object.hasOwn(defaults, 'startupCommand')) next.startupCommand = String(defaults.startupCommand ?? '');
+  if (Object.hasOwn(defaults, 'startupCommandRunMode')) {
+    const mode = String(defaults.startupCommandRunMode ?? '');
+    if (mode === 'lineDelay' || mode === 'rules') next.startupCommandRunMode = mode;
+    else if (mode === 'paste' || mode === '') next.startupCommandRunMode = undefined;
+    else return { ok: false, error: 'startupCommandRunMode must be paste, lineDelay, or rules.' };
+  }
+  if (Object.hasOwn(defaults, 'startupCommandRules')) {
+    const parsed = parseStartupCommandRulesInput(defaults.startupCommandRules);
+    if (!parsed.ok) return parsed;
+    next.startupCommandRules = parsed.rules;
+  }
   if (Object.hasOwn(defaults, 'moshServerPath')) next.moshServerPath = String(defaults.moshServerPath ?? '');
   if (Object.hasOwn(defaults, 'identityId')) {
     const identityId = String(defaults.identityId ?? '');

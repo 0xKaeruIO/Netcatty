@@ -55,6 +55,17 @@ test("applyGroupDefaults inherits startup command run mode", () => {
   assert.equal(result.startupCommandRunMode, "paste");
 });
 
+test("applyGroupDefaults inherits startup command rules", () => {
+  const rules = [{ expect: "password:", send: "secret" }];
+  const result = applyGroupDefaults(host(), {
+    startupCommandRunMode: "rules",
+    startupCommandRules: rules,
+  });
+
+  assert.equal(result.startupCommandRunMode, "rules");
+  assert.deepEqual(result.startupCommandRules, rules);
+});
+
 test("resolveGroupDefaults lets child group device type override parent device type", () => {
   const resolved = resolveGroupDefaults("prod/access", [
     {

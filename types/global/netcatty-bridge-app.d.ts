@@ -93,6 +93,7 @@ declare global {
     }): Promise<{ ok: boolean; roomId: string; label?: string; cols?: number; rows?: number }>;
     orgCenterShareLeave?(sessionId: string): Promise<{ left: boolean }>;
     orgCenterShareGuestInput?(sessionId: string, data: string): void;
+    orgCenterShareReportCapacity?(sessionId: string, cols: number, rows: number): void;
     orgCenterShareHostResize?(sessionId: string, cols: number, rows: number): void;
     onOrgCenterShareEvent?(callback: (payload: {
       type: string;
@@ -102,6 +103,11 @@ declare global {
       label?: string;
       cols?: number;
       rows?: number;
+      source?: string;
+      hostCols?: number;
+      hostRows?: number;
+      guestCols?: number;
+      guestRows?: number;
       reason?: string;
       message?: string;
     }) => void): () => void;

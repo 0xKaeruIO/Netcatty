@@ -106,6 +106,7 @@ const VAULT_HOST_UPDATE_FIELDS = [
   'proxyProfileId',
   'startupCommand',
   'startupCommandRunMode',
+  'startupCommandRules',
   'environmentVariables',
   'moshEnabled',
   'moshServerPath',
@@ -118,6 +119,13 @@ export function sanitizeHostForAgent(host: Host): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(host)) {
     if (SENSITIVE_HOST_KEYS.has(key)) continue;
+    if (key === 'startupCommandRules' && Array.isArray(value)) {
+      sanitized[key] = (value as Array<{ expect?: string; send?: string }>).map((rule) => ({
+        expect: String(rule?.expect ?? ''),
+        send: rule?.send ? '[redacted]' : '',
+      }));
+      continue;
+    }
     if (key === 'proxyConfig' && value && typeof value === 'object' && !Array.isArray(value)) {
       const safeProxyConfig = { ...(value as Record<string, unknown>) };
       delete safeProxyConfig.password;

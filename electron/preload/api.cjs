@@ -1698,6 +1698,9 @@ function createPreloadApi(ctx) {
   orgCenterShareGuestInput: (sessionId, data) => {
     ipcRenderer.send("netcatty:orgCenterShare:guestInput", { sessionId, data });
   },
+  orgCenterShareReportCapacity: (sessionId, cols, rows) => {
+    ipcRenderer.send("netcatty:orgCenterShare:reportCapacity", { sessionId, cols, rows });
+  },
   orgCenterShareHostResize: (sessionId, cols, rows) => {
     ipcRenderer.send("netcatty:orgCenterShare:hostResize", { sessionId, cols, rows });
   },

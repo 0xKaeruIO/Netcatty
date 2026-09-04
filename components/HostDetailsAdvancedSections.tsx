@@ -7,12 +7,11 @@ import { MAX_FONT_SIZE, MIN_FONT_SIZE } from "../infrastructure/config/fonts";
 import { AlgorithmOverridesPanel } from "./host-details/AlgorithmOverridesPanel";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { HostDetailsSection, HostDetailsSettingRow, HostDetailsOverrideReset } from "./host-details";
+import { HostDetailsSection, HostDetailsSettingRow, HostDetailsOverrideReset, StartupCommandFields } from "./host-details";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Switch } from "./ui/switch";
-import { Textarea } from "./ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import {
   DEFAULT_SSH_AUTH_READY_TIMEOUT_SECONDS,
@@ -743,33 +742,18 @@ export const HostDetailsAdvancedSections: React.FC<HostDetailsAdvancedSectionsPr
           title={t("hostDetails.startupCommand")}
           hint={t("hostDetails.startupCommand.help")}
         >
-          <Textarea
-            placeholder={effectiveGroupDefaults?.startupCommand || t("hostDetails.startupCommand.placeholder")}
-            value={form.startupCommand || ""}
-            onChange={(e) => update("startupCommand", e.target.value)}
-            className="min-h-[80px] font-mono text-sm"
-            rows={3}
+          <StartupCommandFields
+            t={t}
+            command={form.startupCommand || ""}
+            runMode={effectiveStartupCommandRunMode}
+            rules={form.startupCommandRules ?? effectiveGroupDefaults?.startupCommandRules ?? []}
+            inheritedCommand={effectiveGroupDefaults?.startupCommand}
+            inheritedRunMode={inheritedStartupCommandRunMode}
+            commandPlaceholder={t("hostDetails.startupCommand.placeholder")}
+            onCommandChange={(value) => update("startupCommand", value ?? "")}
+            onRunModeChange={(value) => update("startupCommandRunMode", value)}
+            onRulesChange={(rules) => update("startupCommandRules", rules)}
           />
-          <HostDetailsSettingRow
-            label={t("hostDetails.startupCommand.runMode")}
-            hint={t("hostDetails.startupCommand.runMode.help")}
-          >
-            <Select
-              value={effectiveStartupCommandRunMode}
-              onValueChange={(value) => update(
-                "startupCommandRunMode",
-                value === inheritedStartupCommandRunMode ? undefined : value,
-              )}
-            >
-              <SelectTrigger className="h-8 w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="lineDelay">{t("hostDetails.startupCommand.runMode.lineDelay")}</SelectItem>
-                <SelectItem value="paste">{t("hostDetails.startupCommand.runMode.paste")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </HostDetailsSettingRow>
         </HostDetailsSection>
   </>
   );

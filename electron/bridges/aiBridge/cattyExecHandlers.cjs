@@ -4,6 +4,7 @@
 // (based in electron/bridges/). Requiring here keeps the path unambiguous.
 const { formatSyntheticEcho } = require("../ai/shellUtils.cjs");
 const { ensureSessionShellKindForExec } = require("../ai/sessionShellKind.cjs");
+const { hasOrgShareGuestSession, execOrgShareGuestCommand } = require("../orgCenterShareBridge.cjs");
 
 function getWorkerExecutionMeta(mcpServerBridge, sessionId, chatSessionId) {
   return mcpServerBridge.getSessionMeta?.(sessionId, chatSessionId) || {};
@@ -77,6 +78,32 @@ function registerCattyExecHandlers(ctx) {
     }
     const session = sessions?.get(sessionId);
     if (!session) {
+      if (hasOrgShareGuestSession(sessionId)) {
+        const safety = mcpServerBridge.checkCommandSafety(command);
+        if (safety.blocked) {
+          return { ok: false, error: `Command blocked by safety policy. Pattern: ${safety.matchedPattern}` };
+        }
+        const busyErr = mcpServerBridge.getSessionBusyError?.(sessionId);
+        if (busyErr) return busyErr;
+        const reservation = mcpServerBridge.reserveSessionExecution?.(sessionId, "exec");
+        if (reservation && !reservation.ok) return reservation;
+        const sessionToken = reservation?.token;
+        const releaseLock = () => {
+          if (sessionToken) {
+            try { mcpServerBridge.releaseSessionExecution?.(sessionId, sessionToken); } catch {}
+          }
+        };
+        try {
+          const timeoutMs = mcpServerBridge.getCommandTimeoutMs
+            ? mcpServerBridge.getCommandTimeoutMs()
+            : 60000;
+          return await execOrgShareGuestCommand(sessionId, command, { timeoutMs });
+        } catch (err) {
+          return { ok: false, error: err?.message || String(err), stdout: "", stderr: "", exitCode: null };
+        } finally {
+          releaseLock();
+        }
+      }
       return proxyCattyExecToWorker({
         event,
         terminalWorkerManager,

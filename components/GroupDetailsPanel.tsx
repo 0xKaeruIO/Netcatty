@@ -101,7 +101,7 @@ export const hasGroupSshFields = (c: Partial<GroupConfig>): boolean =>
   c.port !== undefined || !!c.username || !!c.password || !!c.identityFileId ||
   c.deviceType !== undefined ||
   c.agentForwarding !== undefined || c.authMethod !== undefined || c.identityId !== undefined ||
-  !!c.proxyProfileId || !!c.proxyConfig || !!c.hostChain || !!c.startupCommand || c.startupCommandRunMode !== undefined || c.legacyAlgorithms !== undefined || c.skipEcdsaHostKey !== undefined || c.algorithms !== undefined || c.backspaceBehavior !== undefined ||
+  !!c.proxyProfileId || !!c.proxyConfig || !!c.hostChain || !!c.startupCommand || c.startupCommandRunMode !== undefined || (c.startupCommandRules && c.startupCommandRules.length > 0) || c.legacyAlgorithms !== undefined || c.skipEcdsaHostKey !== undefined || c.algorithms !== undefined || c.backspaceBehavior !== undefined ||
   Boolean(c.environmentVariables && c.environmentVariables.length > 0) ||
   c.moshEnabled !== undefined || !!c.moshServerPath ||
   c.etEnabled !== undefined || c.etPort !== undefined ||
@@ -262,6 +262,7 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
       delete next.agentForwarding;
       delete next.startupCommand;
       delete next.startupCommandRunMode;
+      delete next.startupCommandRules;
       delete next.legacyAlgorithms;
       delete next.skipEcdsaHostKey;
       delete next.algorithms;
@@ -496,6 +497,10 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
     if (!parentGroup || groupConfigs.length === 0) return "paste";
     return resolveGroupDefaults(parentGroup, groupConfigs).startupCommandRunMode ?? "paste";
   }, [groupConfigs, parentGroup]);
+  const inheritedStartupCommandRules = useMemo(() => {
+    if (!parentGroup || groupConfigs.length === 0) return [];
+    return resolveGroupDefaults(parentGroup, groupConfigs).startupCommandRules ?? [];
+  }, [groupConfigs, parentGroup]);
   const inheritedDeviceType = useMemo(() => {
     if (!parentGroup || groupConfigs.length === 0) return undefined;
     return resolveGroupDefaults(parentGroup, groupConfigs).deviceType;
@@ -562,6 +567,7 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
         ...(form.agentForwarding !== undefined && { agentForwarding: form.agentForwarding }),
         ...(form.startupCommand !== undefined && { startupCommand: form.startupCommand }),
         ...(form.startupCommandRunMode !== undefined && { startupCommandRunMode: form.startupCommandRunMode }),
+        ...(form.startupCommandRules !== undefined && { startupCommandRules: form.startupCommandRules }),
         ...(form.legacyAlgorithms !== undefined && { legacyAlgorithms: form.legacyAlgorithms }),
         ...(form.skipEcdsaHostKey !== undefined && { skipEcdsaHostKey: form.skipEcdsaHostKey }),
         ...(form.algorithms !== undefined && { algorithms: form.algorithms }),
@@ -771,6 +777,7 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
           inheritedLegacyAlgorithms={inheritedLegacyAlgorithms}
           inheritedSkipEcdsaHostKey={inheritedSkipEcdsaHostKey}
           inheritedStartupCommandRunMode={inheritedStartupCommandRunMode}
+          inheritedStartupCommandRules={inheritedStartupCommandRules}
           showAlgorithmOverrides={showAlgorithmOverrides}
           setShowAlgorithmOverrides={setShowAlgorithmOverrides}
           inheritedAlgorithmOverrides={inheritedAlgorithmOverrides}

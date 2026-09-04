@@ -67,6 +67,18 @@ import {
   getSessionConnectionLabel,
 } from '../../domain/sessionTabTitle';
 import { cleanupClosedTerminalSessions } from './aiStateSnapshots';
+import { clearGuestShare, isOrgShareGuestSession } from './orgCenterShareStore';
+
+function leaveOrgShareGuestSessions(sessionIds: readonly string[]): void {
+  const bridge = netcattyBridge.get();
+  for (const sessionId of sessionIds) {
+    if (!isOrgShareGuestSession(sessionId)) continue;
+    void Promise.resolve(bridge?.orgCenterShareLeave?.(sessionId)).catch((err: unknown) => {
+      console.error("[orgCenterShare] guest leave failed", err);
+    });
+    clearGuestShare(sessionId);
+  }
+}
 
 export function addWorkspaceIfMissing(
   workspaces: Workspace[],
@@ -562,6 +574,7 @@ export const useSessionState = ({
     const closedIds = sessionsRef.current
       .filter(session => session.workspaceId === workspaceId)
       .map(session => session.id);
+    leaveOrgShareGuestSessions(closedIds);
     cleanupClosedTerminalSessions(closedIds);
     for (const sessionId of closedIds) {
       sessionPresentationStore.clearSession(sessionId);
@@ -585,6 +598,7 @@ export const useSessionState = ({
   }, [setActiveTabId]);
 
   const closeSessions = useCallback((sessionIds: string[]) => {
+    leaveOrgShareGuestSessions(sessionIds);
     cleanupClosedTerminalSessions(sessionIds);
     for (const sessionId of sessionIds) {
       sessionPresentationStore.clearSession(sessionId);

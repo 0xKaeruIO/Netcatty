@@ -84,3 +84,86 @@ test("catty AI exec proxies to the terminal worker when the real session lives i
     ["release", "ssh-1", "token-1"],
   ]);
 });
+
+test("catty AI exec sends org-share guest commands over the share socket instead of the worker", async () => {
+  const {
+    bindShareRuntime,
+    encodePayload,
+  } = require("../orgCenterShareBridge.cjs");
+  const ipcMain = createFakeIpcMain();
+  const requests = [];
+  const sent = [];
+  const share = {
+    ws: {
+      readyState: WebSocket.OPEN,
+      send(raw) {
+        sent.push(JSON.parse(raw));
+      },
+    },
+  };
+  bindShareRuntime({ guestShares: new Map([["guest-1", share]]) });
+  const locks = [];
+  const mcpServerBridge = {
+    getPermissionMode: () => "auto",
+    getSessionBusyError: () => null,
+    reserveSessionExecution(sessionId, kind) {
+      locks.push(["reserve", sessionId, kind]);
+      return { ok: true, token: "token-guest" };
+    },
+    releaseSessionExecution(sessionId, token) {
+      locks.push(["release", sessionId, token]);
+    },
+    checkCommandSafety() {
+      return { blocked: false };
+    },
+    getCommandTimeoutMs() {
+      return 1000;
+    },
+    activePtyExecs: new Map(),
+  };
+
+  try {
+    registerCattyExecHandlers({
+      ipcMain,
+      validateSender: () => true,
+      sessions: new Map(),
+      terminalWorkerManager: {
+        request() {
+          requests.push("worker");
+          throw new Error("worker should not execute org-share guest commands");
+        },
+      },
+      mcpServerBridge,
+      electronModule: {},
+      safeSend() {},
+      execViaPty() {
+        throw new Error("main process should not execute org-share guest commands");
+      },
+      getFreshIdlePrompt() {
+        return "";
+      },
+    });
+
+    const pending = ipcMain.handlers.get("netcatty:ai:exec")(
+      { sender: { id: 7 } },
+      { sessionId: "guest-1", command: "pwd", chatSessionId: "chat-1" },
+    );
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].data, encodePayload("pwd\r"));
+    for (const listener of share.outputListeners) listener("/tmp\n");
+    const result = await pending;
+    assert.deepEqual(result, {
+      ok: true,
+      stdout: "/tmp\n",
+      stderr: "",
+      exitCode: null,
+    });
+    assert.deepEqual(requests, []);
+    assert.deepEqual(locks, [
+      ["reserve", "guest-1", "exec"],
+      ["release", "guest-1", "token-guest"],
+    ]);
+  } finally {
+    bindShareRuntime(null);
+  }
+});

@@ -5,6 +5,11 @@ const {
   ensureSessionShellKind,
   ensureSessionShellKindForExec,
 } = require("../ai/sessionShellKind.cjs");
+const {
+  hasOrgShareGuestSession,
+  execOrgShareGuestCommand,
+  GUEST_BACKGROUND_JOB_ERROR,
+} = require("../orgCenterShareBridge.cjs");
 
 function createExecHandlerApi(ctx) {
   with (ctx) {
@@ -23,7 +28,25 @@ function createExecHandlerApi(ctx) {
         protocol: session?.protocol || session?.type || null,
         shellKind: session?.shellKind || null,
       });
-      if (!session) return { ok: false, error: "Session not found" };
+      if (!session) {
+        if (hasOrgShareGuestSession(sessionId)) {
+          const safety = checkCommandSafety(command);
+          if (safety.blocked) {
+            debugLog("handleExec:blocklisted", { sessionId, matchedPattern: safety.matchedPattern });
+            return { ok: false, error: `Command blocked by safety policy. Pattern: ${safety.matchedPattern}` };
+          }
+          return {
+            ok: true,
+            guestShare: true,
+            context: {
+              sessionId,
+              command,
+              chatSessionId: params?.chatSessionId || null,
+            },
+          };
+        }
+        return { ok: false, error: "Session not found" };
+      }
     
       // Look up device type from metadata (set by renderer from Host.deviceType).
       const chatSessionId = params?.chatSessionId || null;
@@ -82,6 +105,35 @@ function createExecHandlerApi(ctx) {
     function handleExec(params) {
       const resolved = resolveExecContext(params);
       if (!resolved.ok) return resolved;
+      if (resolved.guestShare) {
+        const { sessionId, command, chatSessionId } = resolved.context;
+        const reservation = reserveSessionExecution(sessionId, "exec");
+        if (!reservation.ok) return reservation;
+        const sessionToken = reservation.token;
+        const executionLock = beginChatExecution(chatSessionId, sessionId, command);
+        if (!executionLock.ok) {
+          releaseSessionExecution(sessionId, sessionToken);
+          return {
+            ok: false,
+            code: "COMMAND_ALREADY_RUNNING",
+            error: `Another Netcatty command is already running for chat session "${chatSessionId}". Wait for it to finish before starting a new exec.`,
+            activeCommand: executionLock.active.command,
+            activeSessionId: executionLock.active.sessionId,
+          };
+        }
+        try {
+          return Promise.resolve(execOrgShareGuestCommand(sessionId, command, {
+            timeoutMs: commandTimeoutMs,
+          })).finally(() => {
+            releaseSessionExecution(sessionId, sessionToken);
+            executionLock.release();
+          });
+        } catch (err) {
+          releaseSessionExecution(sessionId, sessionToken);
+          executionLock.release();
+          return { ok: false, error: err?.message || String(err), stdout: "", stderr: "", exitCode: null };
+        }
+      }
       const {
         sessionId,
         command,
@@ -203,6 +255,9 @@ function createExecHandlerApi(ctx) {
     function handleJobStart(params) {
       const resolved = resolveExecContext(params);
       if (!resolved.ok) return resolved;
+      if (resolved.guestShare) {
+        return { ok: false, error: GUEST_BACKGROUND_JOB_ERROR };
+      }
       const {
         sessionId,
         command,

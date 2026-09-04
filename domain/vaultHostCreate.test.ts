@@ -630,6 +630,26 @@ test('applyVaultHostUpdate applies and clears advanced connection settings', () 
   assert.equal(cleared.updatedHost.etEnabled, false);
 });
 
+test('applyVaultHostUpdate stores startup command rules mode', () => {
+  const host: Host = {
+    id: 'host-1', label: 'host', hostname: 'host.example.com', username: 'root', tags: [], os: 'linux',
+  };
+  const result = applyVaultHostUpdate([host], [], host.id, {
+    startupCommandRunMode: 'rules',
+    startupCommandRules: [
+      { expect: '', send: 'ssh jingyang@192.168.0.127' },
+      { expect: 'password:', send: 'secret' },
+    ],
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.updatedHost.startupCommandRunMode, 'rules');
+  assert.deepEqual(result.updatedHost.startupCommandRules, [
+    { expect: '', send: 'ssh jingyang@192.168.0.127' },
+    { expect: 'password:', send: 'secret' },
+  ]);
+});
+
 test('applyVaultHostUpdate rejects malformed advanced connection settings', () => {
   const host: Host = {
     id: 'host-1', label: 'host', hostname: 'host.example.com', username: 'root', tags: [], os: 'linux',
@@ -647,7 +667,7 @@ test('applyVaultHostUpdate rejects malformed advanced connection settings', () =
     { patch: { jumpHostIds: ['missing'] }, error: /Jump host .* was not found/i },
     { patch: { proxyProfileId: 'missing' }, error: /Proxy profile .* was not found/i },
     { patch: { startupCommand: 42 }, error: /startupCommand must be a string/i },
-    { patch: { startupCommandRunMode: 'fast' }, error: /paste or lineDelay/i },
+    { patch: { startupCommandRunMode: 'fast' }, error: /paste, lineDelay, or rules/i },
     { patch: { environmentVariables: '{' }, error: /valid JSON/i },
     { patch: { environmentVariables: [{ value: 'missing-name' }] }, error: /require name and value/i },
     { patch: { moshEnabled: 'maybe' }, error: /moshEnabled must be true or false/i },

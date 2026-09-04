@@ -7,6 +7,14 @@ export type OrgCenterHostShare = {
   pin: string;
   roomId: string;
   status: "starting" | "active";
+  ptyCols?: number;
+  ptyRows?: number;
+  localCols?: number;
+  localRows?: number;
+  peerCols?: number;
+  peerRows?: number;
+  sizeSource?: "self" | "peer" | "mixed" | "matched" | "self-only";
+  scaleToFit?: boolean;
 };
 
 export type OrgCenterGuestShare = {
@@ -17,6 +25,12 @@ export type OrgCenterGuestShare = {
   label: string;
   cols?: number;
   rows?: number;
+  localCols?: number;
+  localRows?: number;
+  peerCols?: number;
+  peerRows?: number;
+  sizeSource?: "self" | "peer" | "mixed" | "matched" | "self-only";
+  scaleToFit?: boolean;
   status: "joining" | "active" | "ended";
 };
 
@@ -69,13 +83,22 @@ export const markHostShareStarting = (sessionId: string, centerId: string): void
     pin: "",
     roomId: "",
     status: "starting",
+    scaleToFit: false,
   });
   emit();
 };
 
 export const markHostShareActive = (
   sessionId: string,
-  info: { centerId: string; pin: string; roomId: string },
+  info: {
+    centerId: string;
+    pin: string;
+    roomId: string;
+    ptyCols?: number;
+    ptyRows?: number;
+    localCols?: number;
+    localRows?: number;
+  },
 ): void => {
   hostShares.set(sessionId, {
     role: "host",
@@ -84,6 +107,11 @@ export const markHostShareActive = (
     pin: info.pin,
     roomId: info.roomId,
     status: "active",
+    scaleToFit: hostShares.get(sessionId)?.scaleToFit ?? false,
+    ptyCols: info.ptyCols,
+    ptyRows: info.ptyRows,
+    localCols: info.localCols,
+    localRows: info.localRows,
   });
   emit();
 };
@@ -98,13 +126,24 @@ export const markGuestShare = (sessionId: string, info: Omit<OrgCenterGuestShare
     role: "guest",
     sessionId,
     ...info,
+    scaleToFit: info.scaleToFit ?? false,
   });
+  emit();
+};
+
+export const patchHostShare = (
+  sessionId: string,
+  patch: Partial<Omit<OrgCenterHostShare, "role" | "sessionId">>,
+): void => {
+  const current = hostShares.get(sessionId);
+  if (!current) return;
+  hostShares.set(sessionId, { ...current, ...patch });
   emit();
 };
 
 export const patchGuestShare = (
   sessionId: string,
-  patch: Partial<Pick<OrgCenterGuestShare, "label" | "cols" | "rows" | "status">>,
+  patch: Partial<Omit<OrgCenterGuestShare, "role" | "sessionId">>,
 ): void => {
   const current = guestShares.get(sessionId);
   if (!current) return;
@@ -115,6 +154,14 @@ export const patchGuestShare = (
 export const clearGuestShare = (sessionId: string): void => {
   if (!guestShares.delete(sessionId)) return;
   emit();
+};
+
+export const setOrgShareScaleToFit = (sessionId: string, scaleToFit: boolean): void => {
+  if (hostShares.has(sessionId)) {
+    patchHostShare(sessionId, { scaleToFit });
+    return;
+  }
+  patchGuestShare(sessionId, { scaleToFit });
 };
 
 export const useOrgCenterShareSnapshot = (): OrgCenterShareSnapshot => (

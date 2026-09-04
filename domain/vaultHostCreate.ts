@@ -1,5 +1,6 @@
 import type { GroupConfig, Host, HostProtocol, Identity, ManagedSource, ProxyProfile } from './models';
 import { sanitizeHost } from './host';
+import { parseStartupCommandRulesInput } from './startupCommandRules';
 import {
   findIntroducedVaultJumpGraphIssue,
   findVaultGroupConfigJumpReference,
@@ -49,6 +50,7 @@ export interface VaultHostUpdatePatch extends VaultHostDraft {
   proxyProfileId?: unknown;
   startupCommand?: unknown;
   startupCommandRunMode?: unknown;
+  startupCommandRules?: unknown;
   environmentVariables?: unknown;
   moshEnabled?: unknown;
   moshServerPath?: unknown;
@@ -356,6 +358,7 @@ export function applyVaultHostUpdate(
   const proxyProfileId = firstProvided(source, ['proxyProfileId']);
   const startupCommand = firstProvided(source, ['startupCommand']);
   const startupCommandRunMode = firstProvided(source, ['startupCommandRunMode']);
+  const startupCommandRules = firstProvided(source, ['startupCommandRules']);
   const environmentVariables = firstProvided(source, ['environmentVariables']);
   const moshEnabled = firstProvided(source, ['moshEnabled']);
   const moshServerPath = firstProvided(source, ['moshServerPath']);
@@ -363,7 +366,7 @@ export function applyVaultHostUpdate(
   const etPort = firstProvided(source, ['etPort']);
   const serialConfig = firstProvided(source, ['serialConfig']);
   const provided = [label, hostname, port, username, password, savePassword, keyPath, group, tags, notes, protocol, os,
-    identityId, jumpHostIds, proxyProfileId, startupCommand, startupCommandRunMode, environmentVariables,
+    identityId, jumpHostIds, proxyProfileId, startupCommand, startupCommandRunMode, startupCommandRules, environmentVariables,
     moshEnabled, moshServerPath, etEnabled, etPort, serialConfig]
     .some((entry) => entry.provided);
   if (!provided) return { ok: false, error: 'At least one host field is required.' };
@@ -501,8 +504,19 @@ export function applyVaultHostUpdate(
   }
   if (startupCommandRunMode.provided) {
     const mode = String(startupCommandRunMode.value ?? '');
-    if (mode !== 'paste' && mode !== 'lineDelay' && mode !== '') return { ok: false, error: 'startupCommandRunMode must be paste or lineDelay.' };
-    updated.startupCommandRunMode = mode === 'lineDelay' ? 'lineDelay' : undefined;
+    if (mode !== 'paste' && mode !== 'lineDelay' && mode !== 'rules' && mode !== '') {
+      return { ok: false, error: 'startupCommandRunMode must be paste, lineDelay, or rules.' };
+    }
+    if (mode === 'lineDelay' || mode === 'rules') {
+      updated.startupCommandRunMode = mode;
+    } else {
+      updated.startupCommandRunMode = undefined;
+    }
+  }
+  if (startupCommandRules.provided) {
+    const parsed = parseStartupCommandRulesInput(startupCommandRules.value);
+    if (!parsed.ok) return parsed;
+    updated.startupCommandRules = parsed.rules;
   }
   if (environmentVariables.provided) {
     let raw: unknown = environmentVariables.value;

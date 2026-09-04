@@ -26,7 +26,7 @@ export interface NetcattyBridge {
     ok: boolean;
     stdout?: string;
     stderr?: string;
-    exitCode?: number;
+    exitCode?: number | null;
     error?: string;
   }>;
   /**
@@ -98,11 +98,11 @@ function toToolResult(toolCallId: string, r: ToolExecResult): ToolResult {
     'stderr' in r.data &&
     'exitCode' in r.data
   ) {
-    const d = r.data as { stdout: string; stderr: string; exitCode: number };
+    const d = r.data as { stdout: string; stderr: string; exitCode: number | null };
     const output = [
       d.stdout ? `STDOUT:\n${d.stdout}` : '',
       d.stderr ? `STDERR:\n${d.stderr}` : '',
-      `Exit code: ${d.exitCode === -1 ? 'unknown' : d.exitCode}`,
+      `Exit code: ${d.exitCode == null || d.exitCode === -1 ? 'unknown' : d.exitCode}`,
     ]
       .filter(Boolean)
       .join('\n\n');

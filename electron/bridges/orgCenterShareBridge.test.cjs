@@ -35,6 +35,18 @@ test("payload round-trips ansi bytes", () => {
   assert.equal(decodePayload(encodePayload(raw)), raw);
 });
 
+test("shared pty layout uses the smaller grid", () => {
+  const { resolveSharedPtyLayout } = require("./orgCenterShareBridge.cjs");
+  assert.deepEqual(
+    resolveSharedPtyLayout({ cols: 120, rows: 40 }, [{ cols: 80, rows: 24 }]),
+    { cols: 80, rows: 24, source: "peer" },
+  );
+  assert.deepEqual(
+    resolveSharedPtyLayout({ cols: 80, rows: 24 }, [{ cols: 120, rows: 40 }]),
+    { cols: 80, rows: 24, source: "self" },
+  );
+});
+
 test("normalizeBaseUrl rejects bad urls", () => {
   assert.throws(() => normalizeBaseUrl(""), /required/i);
   assert.throws(() => normalizeBaseUrl("ftp://x"), /http/i);
@@ -94,4 +106,80 @@ test("guest leave does not close an SSH session", async () => {
   });
   await ipcMain["netcatty:orgCenterShare:leave"]({}, { sessionId: "guest-1" });
   assert.deepEqual(closed, []);
+});
+
+test("formatGuestExecInput appends CR when the command has no newline", () => {
+  const { formatGuestExecInput } = require("./orgCenterShareBridge.cjs");
+  assert.equal(formatGuestExecInput("ls"), "ls\r");
+  assert.equal(formatGuestExecInput("ls\n"), "ls\n");
+  assert.equal(formatGuestExecInput("ls\r"), "ls\r");
+  assert.equal(formatGuestExecInput(""), "");
+});
+
+test("tryExecOrgShareGuestCommand is a no-op for non-guest sessions", () => {
+  const {
+    bindShareRuntime,
+    tryExecOrgShareGuestCommand,
+  } = require("./orgCenterShareBridge.cjs");
+  bindShareRuntime({ guestShares: new Map() });
+  assert.equal(tryExecOrgShareGuestCommand("ssh-1", "pwd"), null);
+  bindShareRuntime(null);
+});
+
+test("guest exec collects live out frames and returns a null exitCode", async () => {
+  const {
+    bindShareRuntime,
+    execOrgShareGuestCommand,
+    encodePayload,
+  } = require("./orgCenterShareBridge.cjs");
+  const sent = [];
+  const share = {
+    ws: {
+      readyState: WebSocket.OPEN,
+      send(raw) {
+        sent.push(JSON.parse(raw));
+      },
+    },
+  };
+  bindShareRuntime({ guestShares: new Map([["guest-1", share]]) });
+  try {
+    const pending = execOrgShareGuestCommand("guest-1", "pwd", {
+      idleMs: 30,
+      timeoutMs: 1000,
+    });
+    assert.equal(share.outputListeners.size, 1);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, "in");
+    assert.equal(sent[0].data, encodePayload("pwd\r"));
+    for (const listener of share.outputListeners) listener("$ pwd\n/home/user\n");
+    const result = await pending;
+    assert.deepEqual(result, {
+      ok: true,
+      stdout: "$ pwd\n/home/user\n",
+      stderr: "",
+      exitCode: null,
+    });
+  } finally {
+    bindShareRuntime(null);
+  }
+});
+
+test("guest exec does not fall through when the share socket is closed", async () => {
+  const {
+    bindShareRuntime,
+    tryExecOrgShareGuestCommand,
+  } = require("./orgCenterShareBridge.cjs");
+  bindShareRuntime({
+    guestShares: new Map([["guest-1", { ws: { readyState: 3 } }]]),
+  });
+  try {
+    const pending = tryExecOrgShareGuestCommand("guest-1", "pwd");
+    assert.notEqual(pending, null);
+    const result = await pending;
+    assert.equal(result.ok, false);
+    assert.match(result.error, /not connected/i);
+    assert.equal(result.exitCode, null);
+  } finally {
+    bindShareRuntime(null);
+  }
 });

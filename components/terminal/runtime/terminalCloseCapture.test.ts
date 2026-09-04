@@ -94,7 +94,7 @@ test("never-connected StrictMode cleanup sync-disposes its owned xterm runtime",
     neverConnectedClose,
     source.indexOf("const persistCloseCapture", neverConnectedClose),
   );
-  assert.match(branch, /if \(!attachExistingSession\)/);
+  assert.match(branch, /if \(!attachExistingSession && orgShareRole !== "guest"\)/);
   assert.match(branch, /disposeOwnedRuntime\(\);/);
   assert.match(branch, /return;/);
   assert.ok(

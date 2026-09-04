@@ -20,6 +20,11 @@ const { getCliDiscoveryFilePath } = require("../cli/discoveryPath.cjs");
 const { EXTERNAL_MCP_CHAT_SESSION_ID } = require("../cli/externalMcpDiscoveryPath.cjs");
 const sftpBridge = require("./sftpBridge.cjs");
 const portForwardingBridge = require("./portForwardingBridge.cjs");
+const {
+  hasOrgShareGuestSession,
+  execOrgShareGuestCommand,
+  GUEST_BACKGROUND_JOB_ERROR,
+} = require("./orgCenterShareBridge.cjs");
 
 const DEBUG_MCP = process.env.NETCATTY_MCP_DEBUG === "1";
 
@@ -1571,7 +1576,9 @@ async function handleWorkerTerminalExec(params = {}) {
   if (typeof command !== "string" || !command.trim()) {
     return { ok: false, error: "Invalid command", exitCode: 1 };
   }
-  if (!terminalWorkerManager?.request) {
+
+  const isGuestShare = hasOrgShareGuestSession(sessionId);
+  if (!isGuestShare && !terminalWorkerManager?.request) {
     return { ok: false, error: "Session not found" };
   }
 
@@ -1600,6 +1607,9 @@ async function handleWorkerTerminalExec(params = {}) {
   }
 
   try {
+    if (isGuestShare) {
+      return await execOrgShareGuestCommand(sessionId, command, { timeoutMs: commandTimeoutMs });
+    }
     return await terminalWorkerManager.request("netcatty:ai:exec", {
       sessionId,
       command,
@@ -1621,6 +1631,9 @@ async function handleWorkerJobStart(params = {}) {
   if (!sessionId || !command) throw new Error("sessionId and command are required");
   if (typeof command !== "string" || !command.trim()) {
     return { ok: false, error: "Invalid command", exitCode: 1 };
+  }
+  if (hasOrgShareGuestSession(sessionId)) {
+    return { ok: false, error: GUEST_BACKGROUND_JOB_ERROR };
   }
   if (!terminalWorkerManager?.request) {
     return { ok: false, error: "Session not found" };
