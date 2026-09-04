@@ -327,3 +327,91 @@ test("removeOrgCenterHosts only drops that center's hosts", () => {
   };
   assert.deepEqual(removeOrgCenterHosts([org, local], "center-1").map((host) => host.id), ["local-1"]);
 });
+
+test("catalog startup command and lineDelay mode are applied", () => {
+  const host = hostFromCatalog(center, {
+    id: "h1",
+    label: "web-1",
+    hostname: "10.0.1.12",
+    port: 22,
+    username: "deploy",
+    group: "",
+    tags: [],
+    os: "linux",
+    protocol: "ssh",
+    notes: "",
+    startupCommand: "tmux attach || tmux",
+    startupCommandRunMode: "lineDelay",
+    startupCommandRules: [],
+    updatedAt: 1,
+  });
+  assert.equal(host.startupCommand, "tmux attach || tmux");
+  assert.equal(host.startupCommandRunMode, "lineDelay");
+  assert.equal(host.startupCommandRules, undefined);
+});
+
+test("catalog rule mode applies expect/send and clears the startup command", () => {
+  const host = hostFromCatalog(center, {
+    id: "h1",
+    label: "jump",
+    hostname: "10.0.1.1",
+    port: 22,
+    username: "root",
+    group: "",
+    tags: [],
+    os: "linux",
+    protocol: "ssh",
+    notes: "",
+    startupCommand: "should-not-run",
+    startupCommandRunMode: "rules",
+    startupCommandRules: [
+      { expect: "password:", send: "secret" },
+      { expect: "", send: "ssh deploy@10.0.1.12" },
+    ],
+    updatedAt: 1,
+  });
+  assert.equal(host.startupCommand, undefined);
+  assert.equal(host.startupCommandRunMode, "rules");
+  assert.deepEqual(host.startupCommandRules, [
+    { expect: "password:", send: "secret" },
+    { expect: "", send: "ssh deploy@10.0.1.12" },
+  ]);
+});
+
+test("catalog startup rules overwrite previous local startup settings on the same org host", () => {
+  const existing: Host = {
+    ...hostFromCatalog(center, {
+      id: "h1",
+      label: "web-1",
+      hostname: "10.0.1.12",
+      port: 22,
+      username: "deploy",
+      group: "",
+      tags: [],
+      os: "linux",
+      protocol: "ssh",
+      notes: "",
+      startupCommand: "echo old",
+      startupCommandRunMode: "paste",
+      updatedAt: 1,
+    }),
+  };
+  const result = applyOrgCenterCatalog([existing], [], center, catalog([{
+    id: "h1",
+    label: "web-1",
+    hostname: "10.0.1.12",
+    port: 22,
+    username: "deploy",
+    group: "",
+    tags: [],
+    os: "linux",
+    protocol: "ssh",
+    notes: "",
+    startupCommandRunMode: "rules",
+    startupCommandRules: [{ expect: "password:", send: "from-center" }],
+    updatedAt: 2,
+  }]));
+  assert.equal(result.hosts[0].startupCommand, undefined);
+  assert.equal(result.hosts[0].startupCommandRunMode, "rules");
+  assert.deepEqual(result.hosts[0].startupCommandRules, [{ expect: "password:", send: "from-center" }]);
+});

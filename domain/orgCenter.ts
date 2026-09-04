@@ -26,6 +26,9 @@ export interface OrgCatalogHost {
   password?: string;
   privateKey?: string;
   passphrase?: string;
+  startupCommand?: string;
+  startupCommandRunMode?: Host["startupCommandRunMode"];
+  startupCommandRules?: Host["startupCommandRules"];
   updatedAt: number;
 }
 
@@ -176,6 +179,7 @@ export const hostFromCatalog = (
     center,
     remoteCenterId ? { center: { id: remoteCenterId, name: center.name } } : undefined,
   ));
+  applyCatalogStartup(next, catalogHost);
   return sanitizeHost(normalizeOrgCenterHostAuth(next));
 };
 
@@ -201,6 +205,38 @@ const applyCatalogCredentials = (host: Host, catalogHost: OrgCatalogHost, namesp
     host.authMethod = "password";
     host.useSshAgent = false;
   }
+};
+
+const applyCatalogStartup = (host: Host, catalogHost: OrgCatalogHost): void => {
+  if (
+    catalogHost.startupCommand === undefined
+    && catalogHost.startupCommandRunMode === undefined
+    && catalogHost.startupCommandRules === undefined
+  ) {
+    return;
+  }
+
+  const rules = Array.isArray(catalogHost.startupCommandRules)
+    ? catalogHost.startupCommandRules
+      .filter((rule): rule is { expect: string; send: string } => Boolean(rule) && typeof rule === "object")
+      .map((rule) => ({
+        expect: typeof rule.expect === "string" ? rule.expect : String(rule.expect ?? ""),
+        send: typeof rule.send === "string" ? rule.send : String(rule.send ?? ""),
+      }))
+    : [];
+  const command = typeof catalogHost.startupCommand === "string" ? catalogHost.startupCommand : "";
+  const mode = catalogHost.startupCommandRunMode;
+
+  if (mode === "rules") {
+    host.startupCommand = undefined;
+    host.startupCommandRunMode = "rules";
+    host.startupCommandRules = rules.length > 0 ? rules : undefined;
+    return;
+  }
+
+  host.startupCommand = command || undefined;
+  host.startupCommandRunMode = mode === "lineDelay" ? "lineDelay" : undefined;
+  host.startupCommandRules = rules.length > 0 ? rules : undefined;
 };
 
 export const applyOrgCenterCatalog = (
