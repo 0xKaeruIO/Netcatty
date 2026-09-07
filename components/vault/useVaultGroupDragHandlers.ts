@@ -3,6 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 import type { Host, ManagedSource } from "../../types";
 import { toast } from "../ui/toast";
+import {
+  orgCenterHostMoveBlockReason,
+  type OrgCenterConnection,
+} from "../../domain/orgCenter";
 
 type DropTarget =
   | { kind: "root" }
@@ -11,6 +15,7 @@ type DropTarget =
 interface UseVaultGroupDragHandlersOptions {
   hosts: Host[];
   managedSources: ManagedSource[];
+  orgCenters?: Array<Pick<OrgCenterConnection, "name">>;
   onUnmanageSource?: (sourceId: string) => void;
   onUpdateHosts: (hosts: Host[]) => void;
   onUpdateManagedSources: (sources: ManagedSource[]) => void;
@@ -20,6 +25,7 @@ interface UseVaultGroupDragHandlersOptions {
 export function useVaultGroupDragHandlers({
   hosts,
   managedSources,
+  orgCenters = [],
   onUnmanageSource,
   onUpdateHosts,
   onUpdateManagedSources,
@@ -73,6 +79,14 @@ export function useVaultGroupDragHandlers({
         setDragOverDropTarget(null);
         return;
       }
+      const moveBlock = orgCenterHostMoveBlockReason(hostToMove, targetGroup, orgCenters);
+      if (moveBlock) {
+        setDragOverDropTarget(null);
+        toast.error(t(moveBlock === "org-host-locked"
+          ? "vault.orgCenter.cannotMoveHost"
+          : "vault.orgCenter.cannotAddHost"));
+        return;
+      }
   
       // Find the most specific (deepest) managed source that matches the target group
       const targetManagedSource = managedSources
@@ -111,7 +125,7 @@ export function useVaultGroupDragHandlers({
           group: groupPath || t("vault.hosts.allHosts"),
         }),
       );
-    }, [hosts, managedSources, onUpdateHosts, pulseDropTarget, t]);
+    }, [hosts, managedSources, onUpdateHosts, orgCenters, pulseDropTarget, t]);
   
   const getDropTargetClasses = (target: DropTarget) =>
       cn(

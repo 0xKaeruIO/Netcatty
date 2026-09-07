@@ -105,6 +105,8 @@ export async function importVaultHostFiles({
   const issues: VaultImportIssue[] = [];
   const keyPassphrases: NonNullable<VaultImportResult["keyPassphrases"]> = [];
   const keyPassphraseCandidates: NonNullable<VaultImportResult["keyPassphraseCandidates"]> = [];
+  const importedKeys: NonNullable<VaultImportResult["keys"]> = [];
+  const importedGroups: string[] = [];
   let parsed = 0;
   let skipped = 0;
   let duplicates = 0;
@@ -137,6 +139,8 @@ export async function importVaultHostFiles({
       })));
       keyPassphrases.push(...(result.keyPassphrases ?? []));
       keyPassphraseCandidates.push(...(result.keyPassphraseCandidates ?? []));
+      importedKeys.push(...(result.keys ?? []));
+      importedGroups.push(...result.groups);
 
       if (fileHosts.length === 0) {
         if (result.stats.skipped === 0 && result.issues.length === 0) {
@@ -177,9 +181,12 @@ export async function importVaultHostFiles({
       seen.add(key);
       return true;
     });
-  const groups = Array.from(new Set(
-    uniqueHosts.map((host) => host.group).filter((group): group is string => Boolean(group)),
-  ));
+  const retainedKeyIds = new Set(uniqueHosts.map((host) => host.identityFileId).filter(Boolean));
+  const keys = importedKeys.filter((key) => retainedKeyIds.has(key.id));
+  const groups = Array.from(new Set([
+    ...importedGroups,
+    ...uniqueHosts.map((host) => host.group).filter((group): group is string => Boolean(group)),
+  ]));
 
   return {
     hosts: uniqueHosts,
@@ -193,5 +200,6 @@ export async function importVaultHostFiles({
     },
     ...(keyPassphrases.length > 0 ? { keyPassphrases } : {}),
     ...(keyPassphraseCandidates.length > 0 ? { keyPassphraseCandidates } : {}),
+    ...(keys.length > 0 ? { keys } : {}),
   };
 }

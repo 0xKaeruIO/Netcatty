@@ -3,11 +3,14 @@ import {
   applyOrgCenterCatalog,
   normalizeOrgCenterHostAuth,
   normalizeOrgCenterUrl,
+  removeOrgCenterGroupConfigs,
+  removeOrgCenterGroups,
   removeOrgCenterHosts,
   removeOrgCenterKeys,
+  ungroupLocalHostsInOrgCenterGroups,
   type OrgCenterConnection,
 } from "../../domain/orgCenter";
-import type { Host, SSHKey } from "../../domain/models";
+import type { GroupConfig, Host, SSHKey } from "../../domain/models";
 import { STORAGE_KEY_ORG_CENTERS } from "../../infrastructure/config/storageKeys";
 import { localStorageAdapter, LOCAL_STORAGE_ADAPTER_CHANGED_EVENT } from "../../infrastructure/persistence/localStorageAdapter";
 import { fetchOrgCenterCatalog } from "../../infrastructure/services/orgCenterClient";
@@ -28,9 +31,11 @@ export interface UseOrgCenterStateOptions {
   hosts: Host[];
   keys: SSHKey[];
   customGroups: string[];
+  groupConfigs?: GroupConfig[];
   updateHosts: (hosts: Host[] | ((prev: Host[]) => Host[])) => void;
   updateKeys: (keys: SSHKey[] | ((prev: SSHKey[]) => SSHKey[])) => void;
   updateCustomGroups: (groups: string[] | ((prev: string[]) => string[])) => void;
+  updateGroupConfigs?: (configs: GroupConfig[] | ((prev: GroupConfig[]) => GroupConfig[])) => void;
   autoSync?: boolean;
   isInitialized?: boolean;
 }
@@ -39,9 +44,11 @@ export function useOrgCenterState({
   hosts,
   keys,
   customGroups,
+  groupConfigs = [],
   updateHosts,
   updateKeys,
   updateCustomGroups,
+  updateGroupConfigs,
   autoSync = false,
   isInitialized = true,
 }: UseOrgCenterStateOptions) {
@@ -50,9 +57,11 @@ export function useOrgCenterState({
   const hostsRef = useRef(hosts);
   const keysRef = useRef(keys);
   const groupsRef = useRef(customGroups);
+  const groupConfigsRef = useRef(groupConfigs);
   hostsRef.current = hosts;
   keysRef.current = keys;
   groupsRef.current = customGroups;
+  groupConfigsRef.current = groupConfigs;
   const hasAutoSyncedRef = useRef(false);
   const hasMigratedAuthRef = useRef(false);
 
@@ -152,11 +161,16 @@ export function useOrgCenterState({
   const removeConnection = useCallback((id: string) => {
     const connection = readConnections().find((item) => item.id === id);
     persist(readConnections().filter((item) => item.id !== id));
-    updateHosts(removeOrgCenterHosts(hostsRef.current, id));
-    if (connection) {
-      updateKeys(removeOrgCenterKeys(keysRef.current, connection));
-    }
-  }, [persist, updateHosts, updateKeys]);
+    if (!connection) return;
+    const currentHosts = hostsRef.current;
+    updateCustomGroups(removeOrgCenterGroups(groupsRef.current, connection, currentHosts));
+    updateGroupConfigs?.(removeOrgCenterGroupConfigs(groupConfigsRef.current, connection, currentHosts));
+    updateHosts(removeOrgCenterHosts(
+      ungroupLocalHostsInOrgCenterGroups(currentHosts, connection),
+      id,
+    ));
+    updateKeys(removeOrgCenterKeys(keysRef.current, connection));
+  }, [persist, updateCustomGroups, updateGroupConfigs, updateHosts, updateKeys]);
 
   useEffect(() => {
     if (!autoSync || !isInitialized || hasAutoSyncedRef.current || connections.length === 0) return;

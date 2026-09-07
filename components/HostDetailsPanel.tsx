@@ -11,12 +11,18 @@ import {
 } from "lucide-react";
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useI18n } from "../application/i18n/I18nProvider";
+import { useOrgCenterConnections } from "../application/state/useOrgCenterConnections";
 import { useApplicationBackend, type SshAgentStatus } from "../application/state/useApplicationBackend";
 import { applyGroupDefaults, resolveGroupDefaults, resolveGroupTerminalThemeId } from "../domain/groupConfig";
 import {
   getEffectiveHostDistro,
   normalizePrimaryTelnetState,
 } from "../domain/host";
+import {
+  isAnyOrgCenterHost,
+  isOrgCenterGroup,
+  orgCenterHostMoveBlockReason,
+} from "../domain/orgCenter";
 import {
   formatProxyConfigEndpoint,
   formatProxyConfigType,
@@ -145,6 +151,7 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
   resizeAriaLabel,
 }) => {
   const { t } = useI18n();
+  const orgCenterConnections = useOrgCenterConnections();
   const asideResizeProps = {
     resizable,
     persistWidthStorageKey,
@@ -171,7 +178,7 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
         charset: groupDefaults?.charset ? undefined : "UTF-8",
         distroMode: "auto",
         createdAt: Date.now(),
-        group: defaultGroup || undefined, // Pre-fill with current navigation group
+        group: isOrgCenterGroup(defaultGroup, orgCenterConnections) ? undefined : defaultGroup || undefined,
       } as Host),
   );
 
@@ -529,6 +536,17 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
     const normalizedProxyConfig = proxySave.normalizedProxyConfig;
     let finalLabel = form.label?.trim() || hostname;
     const finalGroup = groupInputValue.trim() || form.group || "";
+    const placementBlock = orgCenterHostMoveBlockReason(
+      { ...form, group: initialData?.group },
+      finalGroup,
+      orgCenterConnections,
+    );
+    if (placementBlock) {
+      toast.error(t(placementBlock === "org-host-locked"
+        ? "vault.orgCenter.cannotMoveHost"
+        : "vault.orgCenter.cannotAddHost"));
+      return;
+    }
 
     const targetManagedSource = managedSources
       .filter(s => finalGroup === s.groupName || finalGroup.startsWith(s.groupName + "/"))
@@ -729,13 +747,16 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
       .filter(Boolean) as Host[];
   }, [allHosts, form.hostChain?.hostIds]);
 
+  const catalogOrgHost = isAnyOrgCenterHost(initialData || form);
   const groupOptions: ComboboxOption[] = useMemo(() => {
-    return groups.map((g) => ({
-      value: g,
-      label: g.includes("/") ? g.split("/").pop()! : g,
-      sublabel: g.includes("/") ? g : undefined,
-    }));
-  }, [groups]);
+    return groups
+      .filter((g) => catalogOrgHost || !isOrgCenterGroup(g, orgCenterConnections))
+      .map((g) => ({
+        value: g,
+        label: g.includes("/") ? g.split("/").pop()! : g,
+        sublabel: g.includes("/") ? g : undefined,
+      }));
+  }, [catalogOrgHost, groups, orgCenterConnections]);
 
   const tagOptions: ComboboxOption[] = useMemo(() => {
     const allTagSet = new Set([...allTags, ...(form.tags || [])]);
@@ -1021,18 +1042,28 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
               options={groupOptions}
               value={form.group || ""}
               onValueChange={(val) => {
+                if (catalogOrgHost) return;
+                if (isOrgCenterGroup(val, orgCenterConnections)) {
+                  toast.error(t("vault.orgCenter.cannotAddHost"));
+                  return;
+                }
                 update("group", val);
                 setGroupInputValue(val);
               }}
               placeholder={t("hostDetails.group.placeholder")}
-              allowCreate={true}
+              allowCreate={!catalogOrgHost}
               onCreateNew={(val) => {
+                if (catalogOrgHost || isOrgCenterGroup(val, orgCenterConnections)) {
+                  toast.error(t("vault.orgCenter.cannotAddHost"));
+                  return;
+                }
                 onCreateGroup?.(val);
                 update("group", val);
                 setGroupInputValue(val);
               }}
               createText="Create Group"
               triggerClassName="flex-1 h-10"
+              disabled={catalogOrgHost}
             />
           </div>
 

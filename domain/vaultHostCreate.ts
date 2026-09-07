@@ -1,5 +1,9 @@
 import type { GroupConfig, Host, HostProtocol, Identity, ManagedSource, ProxyProfile } from './models';
 import { sanitizeHost } from './host';
+import {
+  orgCenterHostMoveBlockReason,
+  type OrgCenterConnection,
+} from './orgCenter';
 import { parseStartupCommandRulesInput } from './startupCommandRules';
 import {
   findIntroducedVaultJumpGraphIssue,
@@ -65,6 +69,7 @@ export interface VaultHostUpdateOptions {
   managedSources?: ManagedSource[];
   identities?: Identity[];
   proxyProfiles?: ProxyProfile[];
+  orgCenters?: Array<Pick<OrgCenterConnection, 'name'>>;
 }
 
 export interface VaultHostCreateIssue {
@@ -410,6 +415,17 @@ export function applyVaultHostUpdate(
       return { ok: false, error: 'group must be a string.' };
     }
     updated.group = normalizeGroupPath(group.value);
+    const moveBlock = orgCenterHostMoveBlockReason(
+      current,
+      updated.group,
+      options.orgCenters ?? [],
+    );
+    if (moveBlock === 'org-host-locked') {
+      return { ok: false, error: 'Organization center hosts cannot be moved.' };
+    }
+    if (moveBlock === 'local-into-org-group') {
+      return { ok: false, error: 'Local hosts cannot be added to an organization center group.' };
+    }
   }
   if (protocol.provided) {
     const rawProtocol = typeof protocol.value === 'string' ? protocol.value.trim().toLowerCase() : '';
@@ -925,7 +941,7 @@ export function applyVaultHostCreates(
   existingHosts: Host[],
   existingGroups: string[],
   createdHosts: Host[],
-  options?: { skipDuplicates?: boolean },
+  options?: { skipDuplicates?: boolean; orgCenters?: Array<Pick<OrgCenterConnection, 'name'>> },
 ): {
   hosts: Host[];
   customGroups: string[];
@@ -934,6 +950,7 @@ export function applyVaultHostCreates(
   addedHosts: Host[];
 } {
   const skipDuplicates = options?.skipDuplicates !== false;
+  const orgCenters = options?.orgCenters ?? [];
   const existingKeys = new Set(existingHosts.map(buildVaultHostMergeKey));
   let newHosts = createdHosts;
   let skippedExistingCount = 0;
@@ -945,6 +962,13 @@ export function applyVaultHostCreates(
       return !duplicate;
     });
   }
+
+  newHosts = newHosts.filter((host) => {
+    if (orgCenterHostMoveBlockReason(host, host.group, orgCenters) === 'local-into-org-group') {
+      return false;
+    }
+    return true;
+  });
 
   const customGroups = Array.from(
     new Set([

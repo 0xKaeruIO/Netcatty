@@ -4,8 +4,17 @@ import {
   applyOrgCenterCatalog,
   catalogGroupPath,
   hostFromCatalog,
+  isAnyOrgCenterHost,
+  isOrgCenterGroup,
+  isOrgCenterRootGroup,
+  orgCenterGroupMoveBlockReason,
+  orgCenterHostMoveBlockReason,
+  orgCenterRootGroup,
   orgHostId,
+  removeOrgCenterGroupConfigs,
+  removeOrgCenterGroups,
   removeOrgCenterHosts,
+  ungroupLocalHostsInOrgCenterGroups,
   type OrgCatalog,
   type OrgCenterConnection,
 } from "./orgCenter.ts";
@@ -338,6 +347,103 @@ test("removeOrgCenterHosts only drops that center's hosts", () => {
     os: "linux",
   };
   assert.deepEqual(removeOrgCenterHosts([org, local], "center-1").map((host) => host.id), ["local-1"]);
+});
+
+test("org groups are the catalog subtree under the center name", () => {
+  assert.equal(orgCenterRootGroup(center), "Ops");
+  assert.equal(isOrgCenterGroup("Ops", [center]), true);
+  assert.equal(isOrgCenterGroup("Ops/production/web", [center]), true);
+  assert.equal(isOrgCenterRootGroup("Ops", [center]), true);
+  assert.equal(isOrgCenterRootGroup("Ops/production", [center]), false);
+  assert.equal(isOrgCenterGroup("Personal", [center]), false);
+  assert.equal(isOrgCenterGroup("OpsBackup", [center]), false);
+});
+
+test("org groups cannot be unparented from the center root", () => {
+  assert.equal(orgCenterGroupMoveBlockReason("Ops", "Renamed", [center]), "org-root-locked");
+  assert.equal(orgCenterGroupMoveBlockReason("Ops/production", "production", [center]), "org-group-unparent");
+  assert.equal(orgCenterGroupMoveBlockReason("Ops/production/web", "Personal/web", [center]), "org-group-unparent");
+  assert.equal(orgCenterGroupMoveBlockReason("Ops/production/web", "", [center]), "org-group-unparent");
+  assert.equal(orgCenterGroupMoveBlockReason("Ops/production", "Ops", [center]), "org-group-unparent");
+  assert.equal(orgCenterGroupMoveBlockReason("Ops/production/web", "Ops/staging/web", [center]), null);
+  assert.equal(orgCenterGroupMoveBlockReason("Ops/production/web", "Ops/web", [center]), null);
+  assert.equal(orgCenterGroupMoveBlockReason("Personal", "", [center]), null);
+});
+
+test("org hosts cannot move and local hosts cannot enter org groups", () => {
+  const org = hostFromCatalog(center, {
+    id: "h1",
+    label: "web-1",
+    hostname: "10.0.1.12",
+    port: 22,
+    username: "deploy",
+    group: "production",
+    tags: [],
+    os: "linux",
+    protocol: "ssh",
+    notes: "",
+    updatedAt: 1,
+  });
+  const local: Host = {
+    id: "local-1",
+    label: "mine",
+    hostname: "127.0.0.1",
+    username: "root",
+    tags: [],
+    os: "linux",
+    group: "Personal",
+  };
+  assert.equal(isAnyOrgCenterHost(org), true);
+  assert.equal(orgCenterHostMoveBlockReason(org, "Ops/staging", [center]), "org-host-locked");
+  assert.equal(orgCenterHostMoveBlockReason(org, "", [center]), "org-host-locked");
+  assert.equal(orgCenterHostMoveBlockReason(org, org.group, [center]), null);
+  assert.equal(orgCenterHostMoveBlockReason(local, "Ops/production", [center]), "local-into-org-group");
+  assert.equal(orgCenterHostMoveBlockReason(local, "Personal", [center]), null);
+});
+
+test("removeOrgCenterGroups recycles the independent subtree and ungroups leftover local hosts", () => {
+  const org = hostFromCatalog(center, {
+    id: "h1",
+    label: "web-1",
+    hostname: "10.0.1.12",
+    port: 22,
+    username: "deploy",
+    group: "production/web",
+    tags: [],
+    os: "linux",
+    protocol: "ssh",
+    notes: "",
+    updatedAt: 1,
+  });
+  const localInOrg: Host = {
+    id: "local-1",
+    label: "mine",
+    hostname: "127.0.0.1",
+    username: "root",
+    tags: [],
+    os: "linux",
+    group: "Ops/production",
+  };
+  const localElsewhere: Host = {
+    id: "local-2",
+    label: "other",
+    hostname: "10.0.0.8",
+    username: "root",
+    tags: [],
+    os: "linux",
+    group: "Personal",
+  };
+  const groups = ["Ops", "Ops/production", "Ops/production/web", "Personal"];
+  const configs = groups.map((path) => ({ path }));
+  assert.deepEqual(removeOrgCenterGroups(groups, center, [org, localInOrg]), ["Personal"]);
+  assert.deepEqual(
+    removeOrgCenterGroupConfigs(configs, center, [org]).map((config) => config.path),
+    ["Personal"],
+  );
+  const ungrouped = ungroupLocalHostsInOrgCenterGroups([org, localInOrg, localElsewhere], center);
+  assert.equal(ungrouped.find((host) => host.id === "local-1")?.group, undefined);
+  assert.equal(ungrouped.find((host) => host.id === "local-2")?.group, "Personal");
+  assert.equal(ungrouped.find((host) => host.id === org.id)?.group, "Ops/production/web");
 });
 
 test("catalog startup command and lineDelay mode are applied", () => {

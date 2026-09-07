@@ -1,4 +1,4 @@
-import { Host, HostChainConfig, HostProtocol } from "./models";
+import { Host, HostChainConfig, HostProtocol, SSHKey } from "./models";
 import { isEncryptedCredentialPlaceholder } from "./credentials";
 import { sanitizeHost } from "./host";
 import { hasMacKeychainAgentDirectives } from "./sshAuth";
@@ -18,6 +18,11 @@ import { findExactHeaderIndex, findHeaderIndex, parseCsv } from "./vaultImport/c
 import { decodeCsvKeyPath, decodeCsvPassphrase } from "./vaultImport/csvCredentialFields";
 import { attachMobaXtermPasswords } from "./vaultImport/mobaXtermPasswords";
 import { looksLikeXshellSession, parseXshellSession } from "./vaultImport/xshell";
+import {
+  exportVaultHostsToJson,
+  importVaultHostsFromJson,
+  looksLikeVaultHostListJson,
+} from "./vaultImport/jsonHosts";
 import { decryptXshellPassword, type XshellDecryptContext } from "./xshellPassword";
 
 export {
@@ -25,6 +30,12 @@ export {
   getVaultCsvTemplate,
   resolveVaultCsvHostKeyPath,
 } from "./vaultImport/csvExport";
+
+export {
+  collectGroupExportPaths,
+  collectHostsInGroupTree,
+  exportVaultHostsToJson,
+} from "./vaultImport/jsonHosts";
 
 interface ParsedJumpHost {
   hostname: string;
@@ -105,12 +116,14 @@ export type VaultImportFormat =
   | "putty"
   | "mobaxterm"
   | "csv"
+  | "json"
   | "securecrt"
   | "xshell"
   | "ssh_config";
 
 export const VAULT_IMPORT_FORMATS: VaultImportFormat[] = [
   "csv",
+  "json",
   "putty",
   "mobaxterm",
   "securecrt",
@@ -145,6 +158,7 @@ export interface VaultImportResult {
   stats: VaultImportStats;
   keyPassphrases?: VaultHostKeyPassphrase[];
   keyPassphraseCandidates?: VaultHostKeyPassphrase[];
+  keys?: SSHKey[];
 }
 
 export type VaultImportDestination =
@@ -1424,6 +1438,8 @@ export const importVaultHostsFromText = (
       return importFromXshell(input, options?.fileName, options?.xshellDecryptContext);
     case "mobaxterm":
       return importFromMobaXterm(input, options);
+    case "json":
+      return importVaultHostsFromJson(input);
     default: {
       const _exhaustive: never = format;
       return _exhaustive;
@@ -1465,6 +1481,10 @@ export function detectVaultImportFormat(text: string): VaultImportFormat | null 
 
   if (looksLikeXshellSession(input)) {
     return "xshell";
+  }
+
+  if (looksLikeVaultHostListJson(input)) {
+    return "json";
   }
 
   const firstLine = input.split(/\r?\n/, 1)[0] ?? "";

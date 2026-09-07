@@ -21,9 +21,11 @@ export function OrgCenterSettings() {
     hosts: vault.hosts,
     keys: vault.keys,
     customGroups: vault.customGroups,
+    groupConfigs: vault.groupConfigs,
     updateHosts: vault.updateHosts,
     updateKeys: vault.updateKeys,
     updateCustomGroups: vault.updateCustomGroups,
+    updateGroupConfigs: vault.updateGroupConfigs,
     autoSync: false,
     isInitialized: vault.isInitialized,
   });

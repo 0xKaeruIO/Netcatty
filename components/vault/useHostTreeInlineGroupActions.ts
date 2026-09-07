@@ -9,6 +9,7 @@ import {
   ensureAncestorPathsExpanded,
   groupDisplayName,
 } from '../../domain/hostGroupPathMutations';
+import { isOrgCenterRootGroup, type OrgCenterConnection } from '../../domain/orgCenter';
 import type { Host, ManagedSource } from '../../types';
 import { toast } from '../ui/toast';
 
@@ -28,6 +29,7 @@ type UseHostTreeInlineGroupActionsParams = {
   setSelectedGroupPath: (path: string | null) => void;
   ensurePathExpanded: (path: string) => void;
   unnamedGroupLabel: string;
+  orgCenters?: Array<Pick<OrgCenterConnection, "name">>;
   t: (key: string) => string;
 };
 
@@ -41,6 +43,7 @@ export function useHostTreeInlineGroupActions({
   setSelectedGroupPath,
   ensurePathExpanded,
   unnamedGroupLabel,
+  orgCenters = [],
   t,
 }: UseHostTreeInlineGroupActionsParams) {
   const startInlineNewGroup = useCallback((parentPath?: string) => {
@@ -60,13 +63,17 @@ export function useHostTreeInlineGroupActions({
   }, [customGroups, ensurePathExpanded, onUpdateCustomGroups, unnamedGroupLabel]);
 
   const startInlineRenameGroup = useCallback((groupPath: string) => {
+    if (isOrgCenterRootGroup(groupPath, orgCenters)) {
+      toast.error(t('vault.orgCenter.cannotRenameRoot'));
+      return;
+    }
     hostTreeInlineHostEditStore.clear();
     hostTreeInlineGroupEditStore.startEdit({
       groupPath,
       initialName: groupDisplayName(groupPath),
       isNew: false,
     });
-  }, []);
+  }, [orgCenters, t]);
 
   const cancelInlineGroupEdit = useCallback(() => {
     const edit = hostTreeInlineGroupEditStore.getEdit();
@@ -80,6 +87,10 @@ export function useHostTreeInlineGroupActions({
   const commitInlineGroupRename = useCallback(async (rawName: string): Promise<boolean> => {
     const edit = hostTreeInlineGroupEditStore.getEdit();
     if (!edit) return false;
+    if (isOrgCenterRootGroup(edit.groupPath, orgCenters) && !edit.isNew) {
+      toast.error(t('vault.orgCenter.cannotRenameRoot'));
+      return false;
+    }
 
     const result = applyGroupPathRename({
       renameTargetPath: edit.groupPath,
@@ -138,6 +149,7 @@ export function useHostTreeInlineGroupActions({
     hosts,
     managedSources,
     onCommitGroupPathChange,
+    orgCenters,
     selectedGroupPath,
     setSelectedGroupPath,
     t,

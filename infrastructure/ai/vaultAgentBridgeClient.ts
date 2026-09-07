@@ -31,6 +31,7 @@ import {
   resumeScriptRun,
   waitForScriptRun,
 } from '../../application/state/scriptAutomationCoordinator.ts';
+import { readOrgCenterConnections } from '../../application/state/useOrgCenterConnections';
 import {
   applyVaultHostDelete,
   applyVaultHostCreates,
@@ -172,7 +173,7 @@ function resolveVaultImportFormat(raw: unknown): VaultImportFormat | 'auto' | { 
     return format as VaultImportFormat;
   }
   return {
-    error: `Unsupported format "${format}". Use csv, putty, mobaxterm, securecrt, xshell, ssh_config, or auto.`,
+    error: `Unsupported format "${format}". Use csv, json, putty, mobaxterm, securecrt, xshell, ssh_config, or auto.`,
   };
 }
 
@@ -673,7 +674,7 @@ export async function handleVaultAgentOp(
         deps.getHosts(),
         deps.getCustomGroups(),
         builtHosts,
-        { skipDuplicates },
+        { skipDuplicates, orgCenters: readOrgCenterConnections() },
       );
 
       if (merged.addedCount === 0) {
@@ -746,6 +747,7 @@ export async function handleVaultAgentOp(
             managedSources: deps.getManagedSources(),
             identities: deps.identities,
             proxyProfiles: deps.proxyProfiles,
+            orgCenters: readOrgCenterConnections(),
           },
         );
         if (!updated.ok) return updated;

@@ -5,8 +5,10 @@
 import { ChevronDown, ChevronUp, Save, Tag, Usb } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../application/i18n/I18nProvider';
+import { useOrgCenterConnections } from '../application/state/useOrgCenterConnections';
 import { useTerminalBackend } from '../application/state/useTerminalBackend';
 import type { GroupConfig, Host, SerialConfig, SerialFlowControl, SerialParity } from '../domain/models';
+import { orgCenterHostMoveBlockReason } from '../domain/orgCenter';
 import {
   resolveSerialBackspaceFormValue,
   resolveSerialBackspaceOverrideOnSave,
@@ -26,6 +28,7 @@ import {
   type AsidePanelResizeProps,
 } from './ui/aside-panel';
 import { HostNotesEditor } from './host/HostNotesEditor';
+import { toast } from './ui/toast';
 import { cn } from '../lib/utils';
 
 interface SerialPort {
@@ -71,6 +74,7 @@ export const SerialHostDetailsPanel: React.FC<SerialHostDetailsPanelPropsWithRes
   resizeAriaLabel,
 }) => {
   const { t } = useI18n();
+  const orgCenters = useOrgCenterConnections();
   const terminalBackend = useTerminalBackend();
   const [ports, setPorts] = useState<SerialPort[]>([]);
   const [isLoadingPorts, setIsLoadingPorts] = useState(false);
@@ -113,6 +117,13 @@ export const SerialHostDetailsPanel: React.FC<SerialHostDetailsPanelPropsWithRes
 
   const handleSave = () => {
     if (!selectedPort) return;
+    const moveBlock = orgCenterHostMoveBlockReason(initialData, group, orgCenters);
+    if (moveBlock) {
+      toast.error(t(moveBlock === 'org-host-locked'
+        ? 'vault.orgCenter.cannotMoveHost'
+        : 'vault.orgCenter.cannotAddHost'));
+      return;
+    }
 
     const config: SerialConfig = {
       path: selectedPort,

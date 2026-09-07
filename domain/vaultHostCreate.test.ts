@@ -244,6 +244,52 @@ test('applyVaultHostCreates writes sanitized hosts into the vault list', () => {
   assert.ok(merged.customGroups.includes('prod'));
 });
 
+test('applyVaultHostCreates drops local hosts targeting an organization group', () => {
+  const { hosts: built } = buildVaultHostsFromDrafts([
+    { hostname: '10.0.0.10', username: 'deploy', group: 'Ops/web' },
+    { hostname: '10.0.0.11', username: 'deploy', group: 'Personal' },
+  ]);
+  const merged = applyVaultHostCreates([], [], built, {
+    orgCenters: [{ name: 'Ops' }],
+  });
+  assert.equal(merged.addedCount, 1);
+  assert.equal(merged.addedHosts[0]?.group, 'Personal');
+});
+
+test('applyVaultHostUpdate rejects moving organization hosts or local hosts into org groups', () => {
+  const orgHost: Host = {
+    id: 'org:center-1:h1',
+    orgCenterId: 'center-1',
+    label: 'web-1',
+    hostname: '10.0.1.12',
+    username: 'deploy',
+    port: 22,
+    tags: [],
+    os: 'linux',
+    group: 'Ops/web',
+  };
+  const localHost: Host = {
+    id: 'local-1',
+    label: 'mine',
+    hostname: '127.0.0.1',
+    username: 'root',
+    port: 22,
+    tags: [],
+    os: 'linux',
+    group: 'Personal',
+  };
+  const orgCenters = [{ name: 'Ops' }];
+  const movedOrg = applyVaultHostUpdate([orgHost], ['Ops', 'Ops/web'], orgHost.id, {
+    group: 'Ops/staging',
+  }, { orgCenters });
+  assert.equal(movedOrg.ok, false);
+
+  const movedLocal = applyVaultHostUpdate([localHost], ['Personal', 'Ops'], localHost.id, {
+    group: 'Ops/web',
+  }, { orgCenters });
+  assert.equal(movedLocal.ok, false);
+});
+
 test('applyVaultHostUpdate changes only provided fields and adds a new group', () => {
   const existing: Host = {
     id: 'host-1',

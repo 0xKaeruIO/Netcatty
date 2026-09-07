@@ -1,14 +1,18 @@
-import { Copy, FileSymlink, Files, Folder, FolderOpen, Monitor, Pencil, Plus, Server, Settings2 } from 'lucide-react';
+import { Copy, FileJson, FileSymlink, Files, Folder, FolderOpen, Monitor, Pencil, Plus, Server, Settings2 } from 'lucide-react';
 import React from 'react';
 
 import { useI18n } from '../../application/i18n/I18nProvider';
+import { useOrgCenterConnections } from '../../application/state/useOrgCenterConnections';
+import { useVaultHostTreeActions } from '../../application/state/vaultHostTreeActionsStore';
 import { requestOpenDualPaneSftp } from '../../application/state/sftp/sftpDualPaneOpenStore';
 import { useSettingsChromeStore } from '../../application/state/settingsChromeStore';
 import { sanitizeHost } from '../../domain/host';
+import { isOrgCenterGroup, isOrgCenterRootGroup } from '../../domain/orgCenter';
 import { isPluginHostProtocol } from '../../domain/pluginConnection';
 import { canOpenDualPaneSftp } from '../../domain/sftpDualPaneOpen';
 import type { Host } from '../../types';
 import { ContextMenuContent, ContextMenuItem, ContextMenuShortcut } from '../ui/context-menu';
+import { toast } from '../ui/toast';
 import { collectOwnedPluginMenus, comparePluginMenus, usePluginContributions } from '../../application/state/usePluginContributions';
 import { PluginContributionIcon } from '../plugins/PluginContributionIcon';
 
@@ -117,6 +121,7 @@ export interface HostTreeGroupContextMenuHandlers {
   onNewGroup: (parentPath?: string) => void;
   onRenameGroup: (groupPath: string) => void;
   onDeleteGroup: (groupPath: string) => void;
+  onExportGroupJson?: (groupPath: string) => void;
   onUnmanageGroup?: (groupPath: string) => void;
 }
 
@@ -129,13 +134,19 @@ export const HostTreeGroupContextMenuContent: React.FC<
   onNewGroup,
   onRenameGroup,
   onDeleteGroup,
+  onExportGroupJson,
   onUnmanageGroup,
 }) => {
   const { t } = useI18n();
+  const orgCenters = useOrgCenterConnections();
+  const treeActions = useVaultHostTreeActions();
+  const exportGroupJson = onExportGroupJson ?? treeActions?.onExportGroupJson;
+  const isOrgRoot = isOrgCenterRootGroup(groupPath, orgCenters);
+  const isOrgGroup = isOrgCenterGroup(groupPath, orgCenters);
 
   return (
     <ContextMenuContent>
-      {onNewHost && (
+      {onNewHost && !isOrgGroup && (
         <ContextMenuItem onClick={() => onNewHost(groupPath)}>
           <Plus className="mr-2 h-4 w-4" /> {t('terminal.layer.hostTree.newHostInGroup')}
         </ContextMenuItem>
@@ -143,9 +154,23 @@ export const HostTreeGroupContextMenuContent: React.FC<
       <ContextMenuItem onClick={() => onNewGroup(groupPath)}>
         <Folder className="mr-2 h-4 w-4" /> {t('vault.hosts.newGroup')}
       </ContextMenuItem>
-      <ContextMenuItem onClick={() => onRenameGroup(groupPath)}>
+      <ContextMenuItem
+        disabled={isOrgRoot}
+        onClick={() => {
+          if (isOrgRoot) {
+            toast.error(t('vault.orgCenter.cannotRenameRoot'));
+            return;
+          }
+          onRenameGroup(groupPath);
+        }}
+      >
         <FolderOpen className="mr-2 h-4 w-4" /> {t('vault.groups.rename')}
       </ContextMenuItem>
+      {exportGroupJson && (
+        <ContextMenuItem onClick={() => exportGroupJson(groupPath)}>
+          <FileJson className="mr-2 h-4 w-4" /> {t('vault.groups.exportJson')}
+        </ContextMenuItem>
+      )}
       <ContextMenuItem
         onClick={() => onDeleteGroup(groupPath)}
         className="text-destructive focus:text-destructive"

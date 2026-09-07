@@ -9,6 +9,7 @@ import {
   Download,
   Edit2,
   FileCode,
+  FileJson,
   FileSymlink,
   FolderPlus,
   FolderTree,
@@ -72,10 +73,16 @@ import {
   sanitizeHost,
   upsertHostById,
 } from "../domain/host";
-import { exportHostsToCsvWithStats } from "../domain/vaultImport";
+import { exportHostsToCsvWithStats, exportVaultHostsToJson } from "../domain/vaultImport";
 import {
   remapSnippetTargetGroupPaths,
 } from "../domain/hostGroupPathMutations";
+import {
+  isOrgCenterGroup,
+  orgCenterGroupMoveBlockReason,
+  orgCenterHostMoveBlockReason,
+} from "../domain/orgCenter";
+import { useOrgCenterConnections } from "../application/state/useOrgCenterConnections";
 import {
   reorderVaultItems,
   reorderVaultStrings,
@@ -359,6 +366,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   terminalSettings,
 }) => {
   const { t } = useI18n();
+  const orgCenterConnections = useOrgCenterConnections();
   const rootRef = useRef<HTMLDivElement>(null);
   const hostsRef = useRef(hosts);
   hostsRef.current = hosts;
@@ -677,12 +685,17 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
         createdAt: Date.now(),
         pinned: undefined,
         lastConnectedAt: undefined,
+        orgCenterId: undefined,
+        group: isOrgCenterGroup(host.group, orgCenterConnections) ? undefined : host.group,
+        identityFileId: host.identityFileId?.startsWith("orgkey:")
+          ? undefined
+          : host.identityFileId,
       };
       // Open the edit panel with the duplicated host for modification
       setEditingHost(duplicatedHost);
       setIsHostPanelOpen(true);
     },
-    [t],
+    [orgCenterConnections, t],
   );
 
   // Export hosts to CSV
@@ -742,6 +755,47 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
       );
     }
   }, [hosts, keys, t]);
+
+  const downloadVaultJsonFile = useCallback((filename: string, json: string) => {
+    const blob = new Blob([json], { type: "application/json;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleExportHostsJson = useCallback((groupPath?: string) => {
+    const result = exportVaultHostsToJson(hosts, customGroups, { keys, identities }, groupPath);
+    if (result.exportedCount === 0 && result.payload.groups.length === 0) {
+      toast.warning(t("vault.hosts.export.toast.noHosts"));
+      return;
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = groupPath
+      ? `group_${groupPath.replace(/[\\/]+/g, "_")}_${date}.json`
+      : `hosts_export_${date}.json`;
+    downloadVaultJsonFile(filename, result.json);
+    if (result.skippedCount > 0) {
+      toast.warning(
+        t("vault.hosts.exportJson.toast.successWithSkipped", {
+          count: result.exportedCount,
+          skipped: result.skippedCount,
+        }),
+      );
+      return;
+    }
+    toast.success(
+      t("vault.hosts.exportJson.toast.success", { count: result.exportedCount }),
+    );
+  }, [customGroups, downloadVaultJsonFile, hosts, identities, keys, t]);
+
+  const handleExportGroupJson = useCallback((groupPath: string) => {
+    handleExportHostsJson(groupPath);
+  }, [handleExportHostsJson]);
 
   // Copy hostname/IP for cross-host paste without opening the editor
   const handleCopyHostname = useCallback(
@@ -972,6 +1026,13 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   ) => {
     try {
       return await onCommitVaultGroupMutation((current) => {
+        const orgMoveBlock = orgCenterGroupMoveBlockReason(sourcePath, nextPath, orgCenterConnections);
+        if (orgMoveBlock === "org-root-locked") {
+          return { ok: false, error: t("vault.orgCenter.cannotRenameRoot") };
+        }
+        if (orgMoveBlock === "org-group-unparent") {
+          return { ok: false, error: t("vault.orgCenter.cannotUnparentGroup") };
+        }
         if (!current.groups.includes(sourcePath)) {
           return { ok: false, error: `Group "${sourcePath}" was not found.` };
         }
@@ -1022,7 +1083,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
     } catch (error) {
       return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
     }
-  }, [onCommitVaultGroupMutation]);
+  }, [onCommitVaultGroupMutation, orgCenterConnections, t]);
 
   const submitRenameGroup = async () => {
     if (!renameTargetPath) return;
@@ -1155,6 +1216,15 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
     const name = sourcePath.split("/").filter(Boolean).pop() || "";
     const newPath = targetParent ? `${targetParent}/${name}` : name;
     if (newPath === sourcePath || newPath.startsWith(sourcePath + "/")) return;
+    const orgMoveBlock = orgCenterGroupMoveBlockReason(sourcePath, newPath, orgCenterConnections);
+    if (orgMoveBlock === "org-root-locked") {
+      toast.error(t("vault.orgCenter.cannotRenameRoot"));
+      return;
+    }
+    if (orgMoveBlock === "org-group-unparent") {
+      toast.error(t("vault.orgCenter.cannotUnparentGroup"));
+      return;
+    }
     if (customGroups.includes(newPath)) {
       toast.error(t("vault.groups.errors.duplicatePath"));
       return;
@@ -1183,6 +1253,13 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
       const target = hostsRef.current.find((host) => host.id === targetHostId);
       if (!source || !target) return;
       const targetGroup = target.group || "";
+      const moveBlock = orgCenterHostMoveBlockReason(source, targetGroup, orgCenterConnections);
+      if (moveBlock) {
+        toast.error(t(moveBlock === "org-host-locked"
+          ? "vault.orgCenter.cannotMoveHost"
+          : "vault.orgCenter.cannotAddHost"));
+        return;
+      }
       const targetManagedSource = managedSources
         .filter(
           (sourceInfo) =>
@@ -1218,7 +1295,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
       onUpdateHosts(reorderedHosts);
       setSortMode("manual");
     },
-    [managedSources, onUpdateHosts, setSortMode],
+    [managedSources, onUpdateHosts, orgCenterConnections, setSortMode, t],
   );
 
   const reorderGroup = useCallback(
@@ -1284,6 +1361,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   } = useVaultGroupDragHandlers({
     hosts,
     managedSources,
+    orgCenters: orgCenterConnections,
     onUnmanageSource,
     onUpdateHosts,
     onUpdateManagedSources,
@@ -1306,6 +1384,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
     setSelectedGroupPath,
     ensurePathExpanded: treeExpandedState.ensurePathExpanded,
     unnamedGroupLabel: t("vault.groups.unnamed"),
+    orgCenters: orgCenterConnections,
     t,
   });
 
@@ -1334,6 +1413,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
     startInlineNewGroup,
     startInlineRenameGroup,
     startInlineDeleteGroup,
+    handleExportGroupJson,
     commitInlineGroupRename,
     cancelInlineGroupEdit,
     commitInlineHostRename,
@@ -1435,6 +1515,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           editingHost,
           editingHostGroupDefaults,
           FileCode,
+          FileJson,
           FileSymlink,
           FolderPlus,
           FolderTree,
@@ -1453,6 +1534,8 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           handleEditHost,
           handleEditTag,
           handleExportHosts,
+          handleExportHostsJson,
+          handleExportGroupJson,
           handleHostConnect,
           handleImportFileSelected,
           handleNewHost,

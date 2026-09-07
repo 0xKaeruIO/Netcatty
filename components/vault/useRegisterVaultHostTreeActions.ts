@@ -23,6 +23,7 @@ type RegisterVaultHostTreeActionsParams = {
   startInlineNewGroup: (parentPath?: string) => void;
   startInlineRenameGroup: (groupPath: string) => void;
   startInlineDeleteGroup: (groupPath: string) => void;
+  handleExportGroupJson?: (groupPath: string) => void;
   commitInlineGroupRename: (name: string) => boolean | void | Promise<boolean | void>;
   cancelInlineGroupEdit: () => void;
   commitInlineHostRename: (name: string) => void;
@@ -55,6 +56,7 @@ export function useRegisterVaultHostTreeActions({
   startInlineNewGroup,
   startInlineRenameGroup,
   startInlineDeleteGroup,
+  handleExportGroupJson,
   commitInlineGroupRename,
   cancelInlineGroupEdit,
   commitInlineHostRename,
@@ -70,6 +72,7 @@ export function useRegisterVaultHostTreeActions({
       onNewGroup: startInlineNewGroup,
       onRenameGroup: startInlineRenameGroup,
       onDeleteGroup: startInlineDeleteGroup,
+      onExportGroupJson: handleExportGroupJson,
       commitInlineGroupRename,
       cancelInlineGroupEdit,
       commitInlineHostRename,
@@ -105,5 +108,6 @@ export function useRegisterVaultHostTreeActions({
     startInlineDeleteGroup,
     startInlineNewGroup,
     startInlineRenameGroup,
+    handleExportGroupJson,
   ]);
 }

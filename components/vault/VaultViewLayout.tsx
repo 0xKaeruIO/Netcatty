@@ -14,6 +14,8 @@ import { VaultHostListSection } from "./VaultHostListSection";
 import { VaultOrgCenterSyncMenu } from "./VaultOrgCenterSyncMenu";
 import { VaultJoinShareMenu } from "./VaultJoinShareMenu";
 import { VaultImportProgressPanel } from "./ImportVaultDialog";
+import { isOrgCenterGroup } from "../../domain/orgCenter";
+import { useOrgCenterConnections } from "../../application/state/useOrgCenterConnections";
 import {
   VaultHeaderSearch,
   VaultPageHeader,
@@ -125,6 +127,7 @@ function VaultConnectionLogsSection({
 }
 
 export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
+  const orgCenterConnections = useOrgCenterConnections();
   const {
     Activity,
     allGroupPaths,
@@ -175,6 +178,7 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
     editingHost,
     editingHostGroupDefaults,
     FileCode,
+    FileJson,
     FileSymlink,
     FolderPlus,
     FolderTree,
@@ -193,6 +197,7 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
     handleEditHost,
     handleEditTag,
     handleExportHosts,
+    handleExportHostsJson,
     handleHostConnect,
     handleImportFileSelected,
     handleNewHost,
@@ -977,7 +982,7 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                       </Button>
                     </DropdownTrigger>
                   </div>
-                  <DropdownContent className="w-44" align="end" alignToParent>
+                  <DropdownContent className="w-52" align="end" alignToParent>
                     <Button
                       variant="ghost"
                       className="w-full justify-start gap-2"
@@ -1006,6 +1011,13 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                       onClick={handleExportHosts}
                     >
                       <Download size={14} /> {t("vault.hosts.export")}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start gap-2"
+                      onClick={() => handleExportHostsJson()}
+                    >
+                      <FileJson size={14} /> {t("vault.hosts.exportJson")}
                     </Button>
                   </DropdownContent>
                 </Dropdown>
@@ -1462,7 +1474,9 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                 defaultGroup={
                   editingHost
                     ? undefined
-                    : newHostGroupPath || selectedGroupPath
+                    : (isOrgCenterGroup(newHostGroupPath || selectedGroupPath, orgCenterConnections)
+                      ? undefined
+                      : newHostGroupPath || selectedGroupPath)
                 }
                 terminalThemeId={terminalThemeId}
                 terminalFontSize={terminalFontSize}

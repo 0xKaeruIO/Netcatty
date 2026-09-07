@@ -65,6 +65,12 @@ const OPTIONS: ImportOption[] = [
     accept: ".csv,.txt",
   },
   {
+    format: "json",
+    label: "JSON",
+    iconSrc: "/import/file.png",
+    accept: ".json,application/json",
+  },
+  {
     format: "securecrt",
     label: "SecureCRT",
     iconSrc: "/import/securecrt.png",

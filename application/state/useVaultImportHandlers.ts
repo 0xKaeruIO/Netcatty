@@ -140,6 +140,8 @@ export function useVaultImportHandlers({
               ? "MobaXterm"
               : format === "csv"
                 ? "CSV"
+                : format === "json"
+                  ? "JSON"
                 : format === "securecrt"
                   ? "SecureCRT"
                   : format === "xshell"
@@ -542,6 +544,15 @@ export function useVaultImportHandlers({
             }
             }
             throwIfCancelled();
+            if (result.keys?.length) {
+              const addedKeyIds = new Set(newHosts.map((host) => host.identityFileId).filter(Boolean));
+              const keysToAdd = result.keys.filter((key) => addedKeyIds.has(key.id));
+              if (keysToAdd.length > 0) {
+                const nextKeys = [...keysRef.current, ...keysToAdd];
+                keysRef.current = nextKeys;
+                onUpdateKeys(nextKeys);
+              }
+            }
             const resolved = await resolveVaultImportKeyPassphraseConflicts(
               result.keyPassphraseCandidates ?? result.keyPassphrases ?? [],
               resolveDefaultKeyPassphraseAliases,

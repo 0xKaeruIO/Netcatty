@@ -13,6 +13,13 @@ import {
 } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
 import { useI18n } from "../application/i18n/I18nProvider";
+import { useOrgCenterConnections } from "../application/state/useOrgCenterConnections";
+import {
+  isOrgCenterRootGroup,
+  isPathInOrgCenterGroup,
+  orgCenterGroupMoveBlockReason,
+  owningOrgCenterRoot,
+} from "../domain/orgCenter";
 import { customThemeStore } from "../application/state/customThemeStore";
 import {
   hasManualGroupSshCredentials,
@@ -185,6 +192,9 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
   resizeAriaLabel,
 }) => {
   const { t } = useI18n();
+  const orgCenterConnections = useOrgCenterConnections();
+  const isOrgRootGroup = isOrgCenterRootGroup(groupPath, orgCenterConnections);
+  const orgRoot = owningOrgCenterRoot(groupPath, orgCenterConnections);
   const asideResizeProps = {
     resizable,
     persistWidthStorageKey,
@@ -450,13 +460,16 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
   // Parent group options — exclude self and children
   const parentGroupOptions = useMemo(() => {
     const selfPath = groupPath;
+    const options = groups
+      .filter((g) => g !== selfPath && !g.startsWith(selfPath + "/"))
+      .filter((g) => !orgRoot || isPathInOrgCenterGroup(g, orgRoot))
+      .map((g) => ({ value: g, label: g }));
+    if (orgRoot && !isOrgRootGroup) return options;
     return [
       { value: "__root__", label: t("vault.groups.details.none") },
-      ...groups
-        .filter((g) => g !== selfPath && !g.startsWith(selfPath + "/"))
-        .map((g) => ({ value: g, label: g })),
+      ...options,
     ];
-  }, [groups, groupPath, t]);
+  }, [groups, groupPath, orgRoot, isOrgRootGroup, t]);
 
   // Effective theme
   const inheritedThemeId = useMemo(() => {
@@ -603,6 +616,15 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
 
     const nameChanged = trimmedName !== originalName;
     const parentChanged = parentGroup !== originalParent;
+    const orgMoveBlock = orgCenterGroupMoveBlockReason(groupPath, newPath, orgCenterConnections);
+    if (orgMoveBlock === "org-root-locked") {
+      setNameError(t("vault.orgCenter.cannotRenameRoot"));
+      return;
+    }
+    if (orgMoveBlock === "org-group-unparent") {
+      setNameError(t("vault.orgCenter.cannotUnparentGroup"));
+      return;
+    }
     onSave(
       result,
       nameChanged ? trimmedName : undefined,
@@ -741,6 +763,7 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
               if (nameError) setNameError(null);
             }}
             className="h-10"
+            disabled={isOrgRootGroup}
           />
           {nameError && (
             <p className="text-xs text-destructive">{nameError}</p>
@@ -748,9 +771,13 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
           <Combobox
             options={parentGroupOptions}
             value={parentGroup || "__root__"}
-            onValueChange={(val) => setParentGroup(val === "__root__" ? "" : val)}
+            onValueChange={(val) => {
+              if (orgRoot && !isOrgRootGroup && val === "__root__") return;
+              setParentGroup(val === "__root__" ? "" : val);
+            }}
             placeholder={t("vault.groups.details.parentGroup")}
             className="w-full"
+            disabled={isOrgRootGroup}
           />
         </HostDetailsSection>
 

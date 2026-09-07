@@ -1,5 +1,5 @@
 import { sanitizeHost } from "./host";
-import type { Host, SSHKey } from "./models";
+import type { GroupConfig, Host, SSHKey } from "./models";
 
 export interface OrgCenterConnection {
   id: string;
@@ -56,8 +56,132 @@ export const normalizeOrgCenterUrl = (raw: string): string => raw.trim().replace
 export const isOrgCenterHost = (host: Host, centerId: string): boolean =>
   host.orgCenterId === centerId || (host.id?.startsWith(`org:${centerId}:`) ?? false);
 
+export const isAnyOrgCenterHost = (host: Pick<Host, "id" | "orgCenterId"> | null | undefined): boolean => {
+  if (!host) return false;
+  return Boolean(host.orgCenterId) || (host.id?.startsWith("org:") ?? false);
+};
+
 export const isOrgCenterKey = (key: SSHKey, centerId: string): boolean =>
   Boolean(centerId) && (key.id?.startsWith(`orgkey:${centerId}:`) ?? false);
+
+export const orgCenterRootGroup = (center: Pick<OrgCenterConnection, "name">): string =>
+  center.name.trim() || "Org";
+
+export const isPathInOrgCenterGroup = (
+  path: string | null | undefined,
+  root: string,
+): boolean => {
+  const normalized = String(path || "").trim();
+  const base = root.trim();
+  if (!normalized || !base) return false;
+  return normalized === base || normalized.startsWith(`${base}/`);
+};
+
+export const isOrgCenterGroup = (
+  path: string | null | undefined,
+  centers: Array<Pick<OrgCenterConnection, "name">>,
+): boolean => centers.some((center) => isPathInOrgCenterGroup(path, orgCenterRootGroup(center)));
+
+export const isOrgCenterRootGroup = (
+  path: string | null | undefined,
+  centers: Array<Pick<OrgCenterConnection, "name">>,
+): boolean => {
+  const normalized = String(path || "").trim();
+  if (!normalized) return false;
+  return centers.some((center) => orgCenterRootGroup(center) === normalized);
+};
+
+export const owningOrgCenterRoot = (
+  path: string | null | undefined,
+  centers: Array<Pick<OrgCenterConnection, "name">>,
+): string | null => {
+  const normalized = String(path || "").trim();
+  if (!normalized) return null;
+  const match = centers.find((center) => isPathInOrgCenterGroup(normalized, orgCenterRootGroup(center)));
+  return match ? orgCenterRootGroup(match) : null;
+};
+
+export type OrgCenterGroupMoveBlockReason = "org-root-locked" | "org-group-unparent";
+
+export const orgCenterGroupMoveBlockReason = (
+  sourcePath: string,
+  nextPath: string,
+  centers: Array<Pick<OrgCenterConnection, "name">>,
+): OrgCenterGroupMoveBlockReason | null => {
+  const source = String(sourcePath || "").trim();
+  const next = String(nextPath || "").trim();
+  if (!source || source === next) return null;
+  if (isOrgCenterRootGroup(source, centers)) return "org-root-locked";
+  const root = owningOrgCenterRoot(source, centers);
+  if (!root) return null;
+  if (!isPathInOrgCenterGroup(next, root) || next === root) return "org-group-unparent";
+  return null;
+};
+
+export type OrgCenterHostMoveBlockReason = "org-host-locked" | "local-into-org-group";
+
+export const orgCenterHostMoveBlockReason = (
+  host: Pick<Host, "id" | "orgCenterId" | "group">,
+  targetGroup: string | null | undefined,
+  centers: Array<Pick<OrgCenterConnection, "name">>,
+): OrgCenterHostMoveBlockReason | null => {
+  const target = String(targetGroup || "").trim();
+  const current = String(host.group || "").trim();
+  if (isAnyOrgCenterHost(host) && current !== target) return "org-host-locked";
+  if (target && isOrgCenterGroup(target, centers) && !isAnyOrgCenterHost(host)) {
+    return "local-into-org-group";
+  }
+  return null;
+};
+
+export const collectOrgCenterGroupRoots = (
+  center: Pick<OrgCenterConnection, "id" | "name">,
+  hosts: Host[] = [],
+): string[] => {
+  const roots = new Set<string>();
+  const named = orgCenterRootGroup(center);
+  if (named) roots.add(named);
+  for (const host of hosts) {
+    if (!isOrgCenterHost(host, center.id)) continue;
+    const root = String(host.group || "").split("/").filter(Boolean)[0];
+    if (root) roots.add(root);
+  }
+  return [...roots];
+};
+
+export const removeOrgCenterGroups = (
+  customGroups: string[],
+  center: Pick<OrgCenterConnection, "id" | "name">,
+  hosts: Host[] = [],
+): string[] => {
+  const roots = collectOrgCenterGroupRoots(center, hosts);
+  return customGroups.filter((group) =>
+    !roots.some((root) => isPathInOrgCenterGroup(group, root)),
+  );
+};
+
+export const removeOrgCenterGroupConfigs = (
+  groupConfigs: GroupConfig[],
+  center: Pick<OrgCenterConnection, "id" | "name">,
+  hosts: Host[] = [],
+): GroupConfig[] => {
+  const roots = collectOrgCenterGroupRoots(center, hosts);
+  return groupConfigs.filter((config) =>
+    !roots.some((root) => isPathInOrgCenterGroup(config.path, root)),
+  );
+};
+
+export const ungroupLocalHostsInOrgCenterGroups = (
+  hosts: Host[],
+  center: Pick<OrgCenterConnection, "id" | "name">,
+): Host[] => {
+  const roots = collectOrgCenterGroupRoots(center, hosts);
+  return hosts.map((host) => {
+    if (isOrgCenterHost(host, center.id)) return host;
+    if (!roots.some((root) => isPathInOrgCenterGroup(host.group, root))) return host;
+    return { ...host, group: undefined };
+  });
+};
 
 const hasExplicitAgentSettings = (host: Pick<Host, "identityAgent" | "useKeychain" | "addKeysToAgent">): boolean => {
   if (host.identityAgent?.trim() || host.useKeychain === true) return true;

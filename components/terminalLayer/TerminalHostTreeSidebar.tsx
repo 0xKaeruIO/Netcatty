@@ -2,6 +2,8 @@ import { ChevronRight, Folder, FolderOpen, Plus, Server, Settings2 } from 'lucid
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useI18n } from '../../application/i18n/I18nProvider';
+import { useOrgCenterConnections } from '../../application/state/useOrgCenterConnections';
+import { isOrgCenterGroup } from '../../domain/orgCenter';
 import {
   hostTreeInlineGroupEditStore,
   useHostTreeInlineGroupEdit,
@@ -359,6 +361,7 @@ const HostTreeFlatRowItem = memo<HostTreeFlatRowProps>(({
   menuActions,
 }) => {
   const { t } = useI18n();
+  const orgCenters = useOrgCenterConnections();
   const dragCapabilities = resolveTerminalHostTreeDragCapabilities({
     kind: row.kind,
     canReorder,
@@ -624,9 +627,11 @@ const HostTreeFlatRowItem = memo<HostTreeFlatRowProps>(({
         />
       ) : (
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => onNewHost?.(node.path)}>
-            <Plus className="mr-2 h-4 w-4" /> {t('terminal.layer.hostTree.newHostInGroup')}
-          </ContextMenuItem>
+          {!isOrgCenterGroup(node.path, orgCenters) && (
+            <ContextMenuItem onClick={() => onNewHost?.(node.path)}>
+              <Plus className="mr-2 h-4 w-4" /> {t('terminal.layer.hostTree.newHostInGroup')}
+            </ContextMenuItem>
+          )}
         </ContextMenuContent>
       )}
     </ContextMenu>

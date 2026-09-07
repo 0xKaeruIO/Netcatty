@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useI18n } from '../i18n/I18nProvider';
+import { useOrgCenterConnections } from './useOrgCenterConnections';
 import { upsertHostById } from '../../domain/host';
+import { isOrgCenterGroup } from '../../domain/orgCenter';
 import type { Host } from '../../types';
+import { toast } from '../../components/ui/toast';
 
 export type WorkSurfaceHostEditorMode = 'new' | 'edit';
 
@@ -108,6 +112,8 @@ export function useWorkSurfaceHostEditor({
   onUpdateHosts,
   onSaved,
 }: UseWorkSurfaceHostEditorOptions) {
+  const { t } = useI18n();
+  const orgCenters = useOrgCenterConnections();
   const [target, setTarget] = useState<WorkSurfaceHostEditorTarget | null>(null);
   const requestIdRef = useRef(0);
 
@@ -117,12 +123,16 @@ export function useWorkSurfaceHostEditor({
   }, []);
 
   const openNew = useCallback((defaultGroup?: string | null) => {
+    if (defaultGroup && isOrgCenterGroup(defaultGroup, orgCenters)) {
+      toast.error(t('vault.orgCenter.cannotAddHost'));
+      return;
+    }
     setTarget({
       mode: 'new',
       defaultGroup: defaultGroup || null,
       requestId: nextRequestId(),
     });
-  }, [nextRequestId]);
+  }, [nextRequestId, orgCenters, t]);
 
   const openEdit = useCallback((host: Host) => {
     setTarget({ mode: 'edit', openedHost: host, requestId: nextRequestId() });
