@@ -36,6 +36,7 @@ export interface OrgCatalog {
   version: 1;
   center: { id: string; name: string };
   generatedAt: number;
+  groups?: string[];
   hosts: OrgCatalogHost[];
 }
 
@@ -290,9 +291,17 @@ export const applyOrgCenterCatalog = (
   }
 
   const groupSet = new Set(customGroups);
-  for (const catalogHost of catalog.hosts) {
-    for (const path of collectGroupPaths(catalogGroupPath(center.name, catalogHost.group))) {
+  const addCatalogGroup = (catalogGroup: string) => {
+    for (const path of collectGroupPaths(catalogGroupPath(center.name, catalogGroup))) {
       groupSet.add(path);
+    }
+  };
+  for (const catalogHost of catalog.hosts) {
+    addCatalogGroup(catalogHost.group);
+  }
+  if (Array.isArray(catalog.groups)) {
+    for (const group of catalog.groups) {
+      addCatalogGroup(group);
     }
   }
 

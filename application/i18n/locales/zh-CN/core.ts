@@ -279,7 +279,9 @@ export const zhCNCoreMessages: Messages = {
   'settings.orgCenter.error.apiKey': '组织中心 API 密钥无效。',
   'settings.orgCenter.error.timeout': '连接组织中心超时。',
   'settings.orgCenter.error.catalog': '组织中心返回了不支持的目录。',
+  'settings.orgCenter.error.shareRoom': '组织中心返回了不支持的分享会话。',
   'settings.orgCenter.error.bridge': '当前窗口无法访问组织中心。',
+  'settings.orgCenter.error.network': '无法连接组织中心，请检查地址、网络或防火墙。',
   'settings.orgCenter.error.generic': '无法连接组织中心。',
   'vault.hosts.orgCenter': '组织',
 

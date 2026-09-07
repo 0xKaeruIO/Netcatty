@@ -59,6 +59,18 @@ test("applyOrgCenterCatalog inserts hosts and group paths", () => {
   assert.notEqual(result.hosts[0].useSshAgent, true);
 });
 
+test("applyOrgCenterCatalog keeps empty catalog groups under the center name", () => {
+  const result = applyOrgCenterCatalog([], [], center, {
+    version: 1,
+    center: { id: "remote", name: "Ops" },
+    generatedAt: 1,
+    groups: ["staging/empty"],
+    hosts: [],
+  });
+  assert.deepEqual(result.customGroups, ["Ops", "Ops/staging", "Ops/staging/empty"]);
+  assert.equal(result.hosts.length, 0);
+});
+
 test("catalog hosts do not require a system SSH agent", () => {
   const host = hostFromCatalog(center, {
     id: "h1",

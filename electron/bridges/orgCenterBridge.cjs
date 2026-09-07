@@ -22,6 +22,25 @@ function normalizeBaseUrl(raw) {
   return trimmed;
 }
 
+function rewriteOrgCenterFetchError(err) {
+  if (err?.name === "AbortError") {
+    return new Error("Organization center request timed out.");
+  }
+  const combined = `${err?.message || ""} ${err?.cause?.message || err?.cause?.code || ""}`.toLowerCase();
+  if (
+    /timed out|etimedout|und_err_connect_timeout|und_err_headers_timeout|und_err_body_timeout|connect timeout/.test(combined)
+  ) {
+    return new Error("Organization center request timed out.");
+  }
+  if (
+    err?.name === "TypeError"
+    || /fetch failed|econnrefused|enotfound|eai_again|econnreset|econnaborted|enetunreach|ehostunreach|getaddrinfo|socket hang up/.test(combined)
+  ) {
+    return new Error("Could not reach the organization center.");
+  }
+  return err instanceof Error ? err : new Error(String(err || "Could not reach the organization center."));
+}
+
 function extractApiKey(payload) {
   const key = String(payload?.apiKey ?? "").trim();
   if (!key.startsWith("ncc_")) {
@@ -47,10 +66,7 @@ async function fetchJson(url, apiKey, timeoutMs = 15000) {
     }
     return body;
   } catch (err) {
-    if (err?.name === "AbortError") {
-      throw new Error("Organization center request timed out.");
-    }
-    throw err;
+    throw rewriteOrgCenterFetchError(err);
   } finally {
     clearTimeout(timer);
   }

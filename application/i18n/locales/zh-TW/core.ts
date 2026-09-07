@@ -282,7 +282,9 @@ export const zhTWCoreMessages: Messages = {
   'settings.orgCenter.error.apiKey': '組織中心 API 金鑰無效。',
   'settings.orgCenter.error.timeout': '連線組織中心逾時。',
   'settings.orgCenter.error.catalog': '組織中心回傳了不支援的目錄。',
+  'settings.orgCenter.error.shareRoom': '組織中心回傳了不支援的分享工作階段。',
   'settings.orgCenter.error.bridge': '目前視窗無法存取組織中心。',
+  'settings.orgCenter.error.network': '無法連線組織中心，請檢查網址、網路或防火牆。',
   'settings.orgCenter.error.generic': '無法連線組織中心。',
   'vault.hosts.orgCenter': '組織',
 

@@ -282,7 +282,9 @@ export const enCoreMessages: Messages = {
   'settings.orgCenter.error.apiKey': 'Invalid organization center API key.',
   'settings.orgCenter.error.timeout': 'Organization center request timed out.',
   'settings.orgCenter.error.catalog': 'Organization center returned an unsupported catalog.',
+  'settings.orgCenter.error.shareRoom': 'Organization center returned an unsupported share session.',
   'settings.orgCenter.error.bridge': 'Organization center is unavailable in this window.',
+  'settings.orgCenter.error.network': 'Could not reach the organization center. Check the URL, network, and firewall.',
   'settings.orgCenter.error.generic': 'Could not reach the organization center.',
   'vault.hosts.orgCenter': 'org',
 
