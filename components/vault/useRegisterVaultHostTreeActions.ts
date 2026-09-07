@@ -20,6 +20,7 @@ type RegisterVaultHostTreeActionsParams = {
   reorderHost: (sourceHostId: string, targetHostId: string, position: VaultOrderPosition) => void;
   reorderGroup: (sourcePath: string, targetPath: string, position: VaultOrderPosition) => boolean;
   managedGroupPaths?: Set<string>;
+  handleNewHost?: (groupPath?: string) => void;
   startInlineNewGroup: (parentPath?: string) => void;
   startInlineRenameGroup: (groupPath: string) => void;
   startInlineDeleteGroup: (groupPath: string) => void;
@@ -53,6 +54,7 @@ export function useRegisterVaultHostTreeActions({
   reorderHost,
   reorderGroup,
   managedGroupPaths,
+  handleNewHost,
   startInlineNewGroup,
   startInlineRenameGroup,
   startInlineDeleteGroup,
@@ -68,6 +70,9 @@ export function useRegisterVaultHostTreeActions({
       onCopyHostname: handleCopyHostname,
       onDuplicateHost: withVaultFocus(handleDuplicateHost),
       onRenameHost: startInlineRenameHost,
+      onNewHost: handleNewHost
+        ? withVaultFocus((groupPath: string) => handleNewHost(groupPath))
+        : undefined,
       onDeleteHost: (host) => onDeleteHost(host.id),
       onNewGroup: startInlineNewGroup,
       onRenameGroup: startInlineRenameGroup,
@@ -97,6 +102,7 @@ export function useRegisterVaultHostTreeActions({
     handleCopyCredentials,
     handleCopyHostname,
     handleDuplicateHost,
+    handleNewHost,
     handleUnmanageGroup,
     managedGroupPaths,
     moveGroup,

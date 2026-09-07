@@ -141,14 +141,15 @@ export const HostTreeGroupContextMenuContent: React.FC<
   const orgCenters = useOrgCenterConnections();
   const treeActions = useVaultHostTreeActions();
   const exportGroupJson = onExportGroupJson ?? treeActions?.onExportGroupJson;
+  const addHost = onNewHost ?? treeActions?.onNewHost;
   const isOrgRoot = isOrgCenterRootGroup(groupPath, orgCenters);
   const isOrgGroup = isOrgCenterGroup(groupPath, orgCenters);
 
   return (
     <ContextMenuContent>
-      {onNewHost && !isOrgGroup && (
-        <ContextMenuItem onClick={() => onNewHost(groupPath)}>
-          <Plus className="mr-2 h-4 w-4" /> {t('terminal.layer.hostTree.newHostInGroup')}
+      {addHost && !isOrgGroup && (
+        <ContextMenuItem onClick={() => addHost(groupPath)}>
+          <Plus className="mr-2 h-4 w-4" /> {t('hostDetails.chain.addHost')}
         </ContextMenuItem>
       )}
       <ContextMenuItem onClick={() => onNewGroup(groupPath)}>

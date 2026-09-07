@@ -11,6 +11,7 @@ test('advanced host settings expose per-host SSH connection timeouts', () => {
   assert.match(source, /value=\{form\.sshAuthReadyTimeoutSeconds \?\?/);
   assert.match(source, /update\("sshAuthReadyTimeoutSeconds", value\)/);
   assert.equal(source.match(/!Number\.isFinite\(value\)/g)?.length, 2);
+  assert.doesNotMatch(source, /hostDetails\.jumpHosts/);
 });
 
 test('editing enabled SSH agent controls persists the enabled state', () => {

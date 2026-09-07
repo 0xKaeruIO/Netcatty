@@ -16,3 +16,9 @@ test("host context menu offers dual-pane SFTP without extra prop drilling", () =
   assert.match(source, /useSettingsChromeStore/);
   assert.match(source, /!showSftpTab\s*\|\|\s*!canOpenDualPaneSftp/);
 });
+
+test("group context menu adds a host into the parent group", () => {
+  assert.match(source, /onNewHost \?\? treeActions\?\.onNewHost/);
+  assert.match(source, /hostDetails\.chain\.addHost/);
+  assert.match(source, /addHost\(groupPath\)/);
+});

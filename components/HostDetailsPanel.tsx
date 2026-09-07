@@ -1126,6 +1126,9 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
           distroOptions={distroOptions}
           effectiveFormDistro={effectiveFormDistro}
           getDistroOptionLabel={getDistroOptionLabel}
+          chainedHosts={chainedHosts}
+          setActiveSubPanel={setActiveSubPanel}
+          clearHostChain={clearHostChain}
         /> : null}
 
         {onSnippetsChange ? (
@@ -1179,9 +1182,7 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
           effectiveAuthMethod={effectiveAuthMethod}
           showAlgorithmOverrides={showAlgorithmOverrides}
           setShowAlgorithmOverrides={setShowAlgorithmOverrides}
-          chainedHosts={chainedHosts}
           setActiveSubPanel={setActiveSubPanel}
-          clearHostChain={clearHostChain}
           proxySummaryType={proxySummaryType}
           proxySummaryLabel={proxySummaryLabel}
           proxySummaryTooltip={proxySummaryTooltip}

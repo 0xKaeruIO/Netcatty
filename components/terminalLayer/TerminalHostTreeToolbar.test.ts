@@ -114,7 +114,7 @@ test('shared host tree menus expose optional full edit and group host creation a
   assert.match(menuSource, /onEditHost\?: \(host: Host\) => void/);
   assert.match(menuSource, /onNewHost\?: \(groupPath: string\) => void/);
   assert.match(menuSource, /terminal\.layer\.hostTree\.editHost/);
-  assert.match(menuSource, /terminal\.layer\.hostTree\.newHostInGroup/);
+  assert.match(menuSource, /hostDetails\.chain\.addHost/);
 });
 
 test('host tree sidebar wires expand/collapse and host creation availability', () => {

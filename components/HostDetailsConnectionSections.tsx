@@ -1,8 +1,9 @@
 import React from "react";
-import { ChevronDown, Eye, EyeOff, FileKey, FolderLock, FolderOpen, Key, KeyRound, MapPin, Plus, Shapes, Shield, Trash2, User, X } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, FileKey, FolderLock, FolderOpen, Key, KeyRound, Link2, MapPin, Plus, Shapes, Shield, Trash2, User, X } from "lucide-react";
 import type { Host } from "../types";
 import { applyHostAuthMethodSelection } from "../domain/sshAuth";
 import { HostIconPicker } from "./HostIconPicker";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Combobox } from "./ui/combobox";
 import { HostDetailsSection, HostDetailsSettingRow } from "./host-details";
@@ -107,6 +108,9 @@ export const HostDetailsConnectionSections: React.FC<HostDetailsConnectionSectio
   distroOptions,
   effectiveFormDistro,
   getDistroOptionLabel,
+  chainedHosts = [],
+  setActiveSubPanel,
+  clearHostChain,
 }) => {
   const selectAuthMethod = (authMethod: "auto" | "password" | "key" | "certificate") => {
     setForm((previous: Host) => applyEffectiveHostAuthMethodSelection(
@@ -777,6 +781,74 @@ export const HostDetailsConnectionSections: React.FC<HostDetailsConnectionSectio
                 </div>
               )}
           </div>
+        </HostDetailsSection>
+
+        <HostDetailsSection
+          icon={<Link2 size={14} className="text-muted-foreground" />}
+          title={t("hostDetails.jumpHosts")}
+          action={
+            chainedHosts.length > 0 ? (
+              <Badge variant="secondary" className="text-xs">
+                {t("hostDetails.jumpHosts.hops", { count: chainedHosts.length })}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                {t("hostDetails.jumpHosts.direct")}
+              </Badge>
+            )
+          }
+        >
+          {chainedHosts.length > 0 && (
+            <button
+              className="w-full flex flex-col items-start gap-1 p-2 rounded-md bg-secondary/50 hover:bg-secondary transition-colors cursor-pointer"
+              onClick={() => setActiveSubPanel("chain")}
+            >
+              <div className="w-full flex items-center justify-between">
+                <div className="flex items-center gap-1 min-w-0 flex-1">
+                  <Link2
+                    size={14}
+                    className="text-muted-foreground flex-shrink-0"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {t("hostDetails.jumpHosts.hops", { count: chainedHosts.length })}
+                  </span>
+                </div>
+                <X
+                  size={14}
+                  className="text-muted-foreground hover:text-destructive flex-shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearHostChain();
+                  }}
+                />
+              </div>
+              <div className="w-full space-y-1 pl-5">
+                {chainedHosts.slice(0, 5).map((h: Host, idx: number) => (
+                  <div key={h.id} className="flex items-center gap-1 text-sm">
+                    <span className="text-muted-foreground">{idx + 1}.</span>
+                    <span className="truncate">
+                      {h.label !== h.hostname ? `${h.hostname} (${h.label})` : h.hostname}
+                    </span>
+                  </div>
+                ))}
+                {chainedHosts.length > 5 && (
+                  <div className="text-xs text-muted-foreground">
+                    +{chainedHosts.length - 5} more...
+                  </div>
+                )}
+              </div>
+            </button>
+          )}
+          {chainedHosts.length === 0 && (
+            <Button
+              variant="ghost"
+              className="w-full h-9 justify-start gap-2 text-sm"
+              onClick={() => setActiveSubPanel("chain")}
+            >
+              <Plus size={14} />
+              {t("hostDetails.jumpHosts.configure")}
+            </Button>
+          )}
         </HostDetailsSection>
 
         <HostDetailsSection

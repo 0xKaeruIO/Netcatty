@@ -629,7 +629,7 @@ const HostTreeFlatRowItem = memo<HostTreeFlatRowProps>(({
         <ContextMenuContent>
           {!isOrgCenterGroup(node.path, orgCenters) && (
             <ContextMenuItem onClick={() => onNewHost?.(node.path)}>
-              <Plus className="mr-2 h-4 w-4" /> {t('terminal.layer.hostTree.newHostInGroup')}
+              <Plus className="mr-2 h-4 w-4" /> {t('hostDetails.chain.addHost')}
             </ContextMenuItem>
           )}
         </ContextMenuContent>

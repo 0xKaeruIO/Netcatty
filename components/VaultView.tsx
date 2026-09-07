@@ -657,11 +657,11 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
     [hosts, onUpdateHosts],
   );
 
-  const handleNewHost = useCallback(() => {
+  const handleNewHost = useCallback((groupPath?: string) => {
     setIsGroupPanelOpen(false);
     setEditingGroupPath(null);
     setEditingHost(null);
-    setNewHostGroupPath(null);
+    setNewHostGroupPath(typeof groupPath === "string" && groupPath.trim() ? groupPath.trim() : null);
     setIsHostPanelOpen(true);
   }, []);
 
@@ -1402,6 +1402,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
     handleCopyCredentials,
     handleCopyHostname,
     handleDuplicateHost,
+    handleNewHost,
     startInlineRenameHost,
     onDeleteHost,
     handleUnmanageGroup,

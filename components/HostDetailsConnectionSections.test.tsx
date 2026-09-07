@@ -349,3 +349,16 @@ test("an inherited deleted identity remains visible and clearable", () => {
   assert.match(markup, /hostDetails\.identity\.missing/);
   assert.doesNotMatch(markup, /placeholder="hostDetails\.username\.placeholder"/);
 });
+
+test("proxy via hosts sits between port credentials and SFTP settings", () => {
+  const source = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "HostDetailsConnectionSections.tsx"),
+    "utf8",
+  );
+  const portCredentials = source.indexOf('hostDetails.section.portCredentials');
+  const jumpHosts = source.indexOf('hostDetails.jumpHosts');
+  const sftp = source.indexOf('hostDetails.section.sftp');
+  assert.ok(portCredentials >= 0);
+  assert.ok(jumpHosts > portCredentials);
+  assert.ok(sftp > jumpHosts);
+});
