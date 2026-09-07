@@ -3455,6 +3455,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
           label: host.label || host.hostname || "",
           cols: term?.cols || 80,
           rows: term?.rows || 24,
+          skipTlsVerify: connection.skipTlsVerify,
         }),
         new Promise<never>((_, reject) => {
           timeoutId = window.setTimeout(() => {

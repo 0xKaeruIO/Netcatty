@@ -1281,6 +1281,7 @@ export function AppSideEffects() {
         url: connection.url,
         apiKey: connection.apiKey,
         pin,
+        skipTlsVerify: connection.skipTlsVerify,
       });
       if (!result?.ok) {
         throw new Error(t("settings.orgCenter.error.generic"));

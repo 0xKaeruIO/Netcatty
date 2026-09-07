@@ -260,6 +260,7 @@ export const zhCNCoreMessages: Messages = {
   'settings.orgCenter.urlPlaceholder': 'http://10.0.0.1:4780',
   'settings.orgCenter.apiKey': 'API 密钥',
   'settings.orgCenter.apiKeyPlaceholder': 'ncc_...',
+  'settings.orgCenter.skipTlsVerify': '跳过 TLS 证书验证（用于自签名证书）',
   'settings.orgCenter.add': '添加中心',
   'settings.orgCenter.adding': '正在添加...',
   'settings.orgCenter.sync': '同步',

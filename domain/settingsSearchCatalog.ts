@@ -815,7 +815,7 @@ export const SETTINGS_SEARCH_CATALOG: readonly SettingsSearchEntry[] = [
     tab: "system",
     labelKey: "settings.orgCenter.title",
     descriptionKey: "settings.orgCenter.hint",
-    keywords: ["org", "center", "catalog", "组织", "中心", "节点"],
+    keywords: ["org", "center", "catalog", "组织", "中心", "节点", "tls", "https", "证书"],
   },
   {
     id: "system-auto-launch",

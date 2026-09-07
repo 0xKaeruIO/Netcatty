@@ -5,6 +5,8 @@
  * so the renderer does not depend on CORS from a packaged file:// origin.
  */
 
+const { shouldSkipTlsVerify, withOrgCenterTls } = require("./orgCenterTls.cjs");
+
 function normalizeBaseUrl(raw) {
   const trimmed = String(raw ?? "").trim().replace(/\/+$/, "");
   if (!trimmed) {
@@ -49,16 +51,16 @@ function extractApiKey(payload) {
   return key;
 }
 
-async function fetchJson(url, apiKey, timeoutMs = 15000) {
+async function fetchJson(url, apiKey, timeoutMs = 15000, skipTlsVerify = false) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, {
+    const response = await fetch(url, withOrgCenterTls({
       headers: apiKey
         ? { Authorization: `Bearer ${apiKey}`, Accept: "application/json" }
         : { Accept: "application/json" },
       signal: controller.signal,
-    });
+    }, skipTlsVerify));
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       const error = typeof body.error === "string" ? body.error : `HTTP ${response.status}`;
@@ -75,14 +77,16 @@ async function fetchJson(url, apiKey, timeoutMs = 15000) {
 function registerHandlers(ipcMain) {
   ipcMain.handle("netcatty:orgCenter:health", async (_event, payload) => {
     const baseUrl = normalizeBaseUrl(payload?.url);
-    const body = await fetchJson(`${baseUrl}/api/v1/health`);
+    const skipTls = shouldSkipTlsVerify(payload?.skipTlsVerify);
+    const body = await fetchJson(`${baseUrl}/api/v1/health`, undefined, 15000, skipTls);
     return { ok: true, name: body.name || "Netcatty Center", version: body.version ?? 1 };
   });
 
   ipcMain.handle("netcatty:orgCenter:fetchCatalog", async (_event, payload) => {
     const baseUrl = normalizeBaseUrl(payload?.url);
     const apiKey = extractApiKey(payload);
-    const body = await fetchJson(`${baseUrl}/api/v1/catalog`, apiKey);
+    const skipTls = shouldSkipTlsVerify(payload?.skipTlsVerify);
+    const body = await fetchJson(`${baseUrl}/api/v1/catalog`, apiKey, 15000, skipTls);
     if (body?.version !== 1 || !body?.center || !Array.isArray(body.hosts)) {
       throw new Error("Organization center returned an unsupported catalog.");
     }

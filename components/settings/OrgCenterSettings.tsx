@@ -17,7 +17,7 @@ function formatSyncedAt(timestamp: number | undefined, t: (key: string) => strin
 export function OrgCenterSettings() {
   const { t } = useI18n();
   const vault = useVaultState();
-  const { connections, syncingId, addConnection, removeConnection, syncConnection } = useOrgCenterState({
+  const { connections, syncingId, addConnection, removeConnection, syncConnection, setSkipTlsVerify } = useOrgCenterState({
     hosts: vault.hosts,
     keys: vault.keys,
     customGroups: vault.customGroups,
@@ -31,15 +31,17 @@ export function OrgCenterSettings() {
   });
   const [url, setUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [skipTlsVerify, setSkipTlsVerifyDraft] = useState(false);
   const [adding, setAdding] = useState(false);
 
   const handleAdd = useCallback(async () => {
     if (!url.trim() || !apiKey.trim() || adding || !vault.isInitialized) return;
     setAdding(true);
     try {
-      const connection = await addConnection(url, apiKey);
+      const connection = await addConnection(url, apiKey, { skipTlsVerify });
       setUrl("");
       setApiKey("");
+      setSkipTlsVerifyDraft(false);
       toast.success(t("settings.orgCenter.added", { name: connection.name }));
     } catch (err) {
       toast.error(
@@ -49,7 +51,7 @@ export function OrgCenterSettings() {
     } finally {
       setAdding(false);
     }
-  }, [addConnection, adding, apiKey, t, url, vault.isInitialized]);
+  }, [addConnection, adding, apiKey, skipTlsVerify, t, url, vault.isInitialized]);
 
   const handleSync = useCallback(async (id: string) => {
     const connection = connections.find((item) => item.id === id);
@@ -105,6 +107,15 @@ export function OrgCenterSettings() {
                 className="h-9"
               />
             </div>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground select-none">
+              <input
+                type="checkbox"
+                checked={skipTlsVerify}
+                onChange={(event) => setSkipTlsVerifyDraft(event.target.checked)}
+                className="accent-primary"
+              />
+              {t("settings.orgCenter.skipTlsVerify")}
+            </label>
             <Button
               size="sm"
               className="gap-1.5"
@@ -160,6 +171,15 @@ export function OrgCenterSettings() {
                     <p className="text-xs text-muted-foreground">
                       {formatSyncedAt(connection.lastSyncedAt, t)}
                     </p>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground select-none">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(connection.skipTlsVerify)}
+                        onChange={(event) => setSkipTlsVerify(connection.id, event.target.checked)}
+                        className="accent-primary"
+                      />
+                      {t("settings.orgCenter.skipTlsVerify")}
+                    </label>
                     {connection.lastError && (
                       <p className="text-xs text-destructive">
                         {formatOrgCenterError(connection.lastError, t)}

@@ -9,6 +9,7 @@ export interface OrgCenterConnection {
   remoteCenterId?: string;
   lastSyncedAt?: number;
   lastError?: string;
+  skipTlsVerify?: boolean;
 }
 
 export interface OrgCatalogHost {

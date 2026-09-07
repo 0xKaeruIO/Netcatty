@@ -1,6 +1,7 @@
 "use strict";
 
 const { addTerminalDataTap } = require("./emitTerminalSessionData.cjs");
+const { shouldSkipTlsVerify, withOrgCenterTls, openOrgCenterWebSocket } = require("./orgCenterTls.cjs");
 
 const SNAPSHOT_MAX_CHARS = 256 * 1024;
 const FETCH_TIMEOUT_MS = 15000;
@@ -151,11 +152,11 @@ function createRingBuffer(maxChars = SNAPSHOT_MAX_CHARS) {
   };
 }
 
-async function fetchJson(url, { method = "GET", apiKey, body, timeoutMs = FETCH_TIMEOUT_MS } = {}) {
+async function fetchJson(url, { method = "GET", apiKey, body, timeoutMs = FETCH_TIMEOUT_MS, skipTlsVerify = false } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, {
+    const response = await fetch(url, withOrgCenterTls({
       method,
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -164,7 +165,7 @@ async function fetchJson(url, { method = "GET", apiKey, body, timeoutMs = FETCH_
       },
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
-    });
+    }, skipTlsVerify));
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       const error = typeof payload.error === "string" ? payload.error : `HTTP ${response.status}`;
@@ -185,13 +186,13 @@ function parseSocketMessage(event) {
   return JSON.parse(text);
 }
 
-function openShareSocket(url) {
+function openShareSocket(url, skipTlsVerify = false) {
   if (typeof WebSocket !== "function") {
     return Promise.reject(new Error("WebSocket is unavailable in this process."));
   }
   return new Promise((resolve, reject) => {
     let settled = false;
-    const ws = new WebSocket(url);
+    const ws = openOrgCenterWebSocket(url, skipTlsVerify);
     const queued = [];
     let onMessage = null;
     const deliver = (message) => {
@@ -674,6 +675,7 @@ function registerHandlers(ipcMain, options = {}) {
         await fetchJson(`${share.baseUrl}/api/v1/share/rooms/${encodeURIComponent(share.roomId)}`, {
           method: "DELETE",
           apiKey: share.apiKey,
+          skipTlsVerify: share.skipTlsVerify,
         });
       }
     } catch (err) {
@@ -724,9 +726,11 @@ function registerHandlers(ipcMain, options = {}) {
     }
     const baseUrl = normalizeBaseUrl(payload?.url);
     const apiKey = extractApiKey(payload);
+    const skipTls = shouldSkipTlsVerify(payload?.skipTlsVerify);
     const created = await fetchJson(`${baseUrl}/api/v1/share/rooms`, {
       method: "POST",
       apiKey,
+      skipTlsVerify: skipTls,
       body: {
         label: String(payload?.label ?? ""),
         cols: Number(payload?.cols) || 80,
@@ -741,12 +745,13 @@ function registerHandlers(ipcMain, options = {}) {
     }
     let socket;
     try {
-      socket = await openShareSocket(toWebSocketUrl(baseUrl, roomId, "host", hostToken));
+      socket = await openShareSocket(toWebSocketUrl(baseUrl, roomId, "host", hostToken), skipTls);
     } catch (err) {
       try {
         await fetchJson(`${baseUrl}/api/v1/share/rooms/${encodeURIComponent(roomId)}`, {
           method: "DELETE",
           apiKey,
+          skipTlsVerify: skipTls,
         });
       } catch (cleanupErr) {
         console.error("[orgCenterShare] start-failure room delete failed", cleanupErr);
@@ -757,6 +762,7 @@ function registerHandlers(ipcMain, options = {}) {
       sessionId,
       baseUrl,
       apiKey,
+      skipTlsVerify: skipTls,
       roomId,
       pin,
       ws: socket.ws,
@@ -830,10 +836,12 @@ function registerHandlers(ipcMain, options = {}) {
     if (!sessionId) throw new Error("Missing session id.");
     const baseUrl = normalizeBaseUrl(payload?.url);
     const apiKey = extractApiKey(payload);
+    const skipTls = shouldSkipTlsVerify(payload?.skipTlsVerify);
     const pin = String(payload?.pin ?? "").trim();
     const joined = await fetchJson(`${baseUrl}/api/v1/share/join`, {
       method: "POST",
       apiKey,
+      skipTlsVerify: skipTls,
       body: { pin },
     });
     const roomId = String(joined.roomId || "");
@@ -841,11 +849,12 @@ function registerHandlers(ipcMain, options = {}) {
     if (!roomId || !guestToken) {
       throw new Error("Organization center returned an unsupported share room.");
     }
-    const socket = await openShareSocket(toWebSocketUrl(baseUrl, roomId, "guest", guestToken));
+    const socket = await openShareSocket(toWebSocketUrl(baseUrl, roomId, "guest", guestToken), skipTls);
     const share = {
       sessionId,
       baseUrl,
       apiKey,
+      skipTlsVerify: skipTls,
       roomId,
       pin,
       ws: socket.ws,

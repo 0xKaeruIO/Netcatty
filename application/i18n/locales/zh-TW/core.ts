@@ -263,6 +263,7 @@ export const zhTWCoreMessages: Messages = {
   'settings.orgCenter.urlPlaceholder': 'http://10.0.0.1:4780',
   'settings.orgCenter.apiKey': 'API 金鑰',
   'settings.orgCenter.apiKeyPlaceholder': 'ncc_...',
+  'settings.orgCenter.skipTlsVerify': '跳過 TLS 憑證驗證（用於自我簽署憑證）',
   'settings.orgCenter.add': '新增中心',
   'settings.orgCenter.adding': '正在新增...',
   'settings.orgCenter.sync': '同步',

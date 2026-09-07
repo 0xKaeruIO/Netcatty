@@ -72,6 +72,7 @@ test("localized settings include organization center labels", () => {
     "settings.orgCenter.hint",
     "settings.orgCenter.url",
     "settings.orgCenter.apiKey",
+    "settings.orgCenter.skipTlsVerify",
     "settings.orgCenter.add",
     "settings.orgCenter.sync",
     "settings.orgCenter.remove",

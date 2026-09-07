@@ -263,6 +263,7 @@ export const enCoreMessages: Messages = {
   'settings.orgCenter.urlPlaceholder': 'http://10.0.0.1:4780',
   'settings.orgCenter.apiKey': 'API key',
   'settings.orgCenter.apiKeyPlaceholder': 'ncc_...',
+  'settings.orgCenter.skipTlsVerify': 'Skip TLS certificate verification (for self-signed certs)',
   'settings.orgCenter.add': 'Add center',
   'settings.orgCenter.adding': 'Adding...',
   'settings.orgCenter.sync': 'Sync',

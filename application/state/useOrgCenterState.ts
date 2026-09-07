@@ -106,7 +106,7 @@ export function useOrgCenterState({
   const syncConnection = useCallback(async (connection: OrgCenterConnection): Promise<OrgCenterConnection> => {
     setSyncingId(connection.id);
     try {
-      const catalog = await fetchOrgCenterCatalog(connection.url, connection.apiKey);
+      const catalog = await fetchOrgCenterCatalog(connection.url, connection.apiKey, connection.skipTlsVerify);
       const applied = applyOrgCenterCatalog(
         hostsRef.current,
         groupsRef.current,
@@ -136,7 +136,11 @@ export function useOrgCenterState({
     }
   }, [persist, updateCustomGroups, updateHosts, updateKeys]);
 
-  const addConnection = useCallback(async (url: string, apiKey: string): Promise<OrgCenterConnection> => {
+  const addConnection = useCallback(async (
+    url: string,
+    apiKey: string,
+    options?: { skipTlsVerify?: boolean },
+  ): Promise<OrgCenterConnection> => {
     const normalizedUrl = normalizeOrgCenterUrl(url);
     const trimmedKey = apiKey.trim();
     const existing = readConnections();
@@ -148,6 +152,7 @@ export function useOrgCenterState({
       url: normalizedUrl,
       apiKey: trimmedKey,
       name: normalizedUrl.replace(/^https?:\/\//, ""),
+      skipTlsVerify: options?.skipTlsVerify || undefined,
     };
     persist([...existing, draft]);
     try {
@@ -157,6 +162,14 @@ export function useOrgCenterState({
       throw err;
     }
   }, [persist, syncConnection]);
+
+  const setSkipTlsVerify = useCallback((id: string, skipTlsVerify: boolean) => {
+    persist(readConnections().map((item) => (
+      item.id === id
+        ? { ...item, skipTlsVerify: skipTlsVerify || undefined }
+        : item
+    )));
+  }, [persist]);
 
   const removeConnection = useCallback((id: string) => {
     const connection = readConnections().find((item) => item.id === id);
@@ -195,5 +208,6 @@ export function useOrgCenterState({
     addConnection,
     removeConnection,
     syncConnection,
+    setSkipTlsVerify,
   };
 }
