@@ -23,7 +23,7 @@ interface TrafficDiagramProps {
     highlightRole?: 'app' | 'ssh-server' | 'target';
 }
 
-// AppLogo is now imported from ./AppLogo to share accent color theming
+// AppLogo is now imported from ./AppLogo so diagrams use the same app icon.
 
 // Animated line component
 const AnimatedLine: React.FC<{

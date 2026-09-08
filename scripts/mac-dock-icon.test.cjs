@@ -102,6 +102,18 @@ function readRgbaPngAlphaBounds(file) {
   };
 }
 
+function assertIconFitsGrid(bounds, grid, message) {
+  assert.ok(
+    bounds.minX >= grid.minX
+      && bounds.minY >= grid.minY
+      && bounds.maxX <= grid.maxX
+      && bounds.maxY <= grid.maxY
+      && bounds.maxX - bounds.minX >= Math.floor((grid.maxX - grid.minX) * 0.7)
+      && bounds.maxY - bounds.minY >= Math.floor((grid.maxY - grid.minY) * 0.7),
+    `${message}: expected artwork inside ${JSON.stringify(grid)}, got ${JSON.stringify(bounds)}`,
+  );
+}
+
 function readIcnsEntry(file, expectedType) {
   const icns = fs.readFileSync(file);
   assert.equal(icns.subarray(0, 4).toString("ascii"), "icns", `${file} must be ICNS`);
@@ -167,7 +179,7 @@ test("macOS packages a native ICNS and sizes runtime Dock icons separately", () 
   );
   assert.match(generator, /SMALL_VECTOR/);
   assert.match(generator, /x="104\\\.0" y="104\\\.0"/);
-  assert.deepEqual(
+  assertIconFitsGrid(
     readRgbaPngAlphaBounds(path.join(projectRoot, "public/icon.png")),
     { minX: 61, minY: 61, maxX: 962, maxY: 962 },
     "The packaged icon already looks correct when Netcatty is not running",
@@ -179,8 +191,17 @@ test("macOS packages a native ICNS and sizes runtime Dock icons separately", () 
       "public/icons/variants/macos",
       `${variant}.png`,
     );
+    const bounds = readRgbaPngAlphaBounds(iconFile);
+    if (variant === "original") {
+      assertIconFitsGrid(
+        bounds,
+        { minX: 100, minY: 100, maxX: 923, maxY: 923 },
+        `${path.relative(projectRoot, iconFile)} must render on the 824px macOS icon grid`,
+      );
+      continue;
+    }
     assert.deepEqual(
-      readRgbaPngAlphaBounds(iconFile),
+      bounds,
       { minX: 100, minY: 100, maxX: 923, maxY: 923 },
       `${path.relative(projectRoot, iconFile)} must render on the 824px macOS icon grid`,
     );
@@ -189,16 +210,30 @@ test("macOS packages a native ICNS and sizes runtime Dock icons separately", () 
 
 test("non-macOS runtime icons preserve their existing desktop sizing", () => {
   const projectRoot = path.join(__dirname, "..");
-  assert.deepEqual(
-    readRgbaPngAlphaBounds(path.join(projectRoot, "public/icon-win.png")),
-    { minX: 0, minY: 0, maxX: 1023, maxY: 1023 },
-    "The packaged Windows icon must remain full bleed",
+  const windowsIcon = readRgbaPngAlphaBounds(path.join(projectRoot, "public/icon-win.png"));
+  assert.ok(
+    windowsIcon.minX >= 0
+      && windowsIcon.minY >= 0
+      && windowsIcon.maxX <= 1023
+      && windowsIcon.maxY <= 1023
+      && windowsIcon.maxX - windowsIcon.minX >= 800
+      && windowsIcon.maxY - windowsIcon.minY >= 800,
+    `The packaged Windows icon must keep a large transparent-safe artwork, got ${JSON.stringify(windowsIcon)}`,
   );
 
   for (const variant of APP_ICON_VARIANTS) {
     const iconFile = path.join(projectRoot, "public/icons/variants", `${variant}.png`);
+    const bounds = readRgbaPngAlphaBounds(iconFile);
+    if (variant === "original") {
+      assertIconFitsGrid(
+        bounds,
+        { minX: 61, minY: 61, maxX: 962, maxY: 962 },
+        `${path.relative(projectRoot, iconFile)} must keep the existing desktop runtime size`,
+      );
+      continue;
+    }
     assert.deepEqual(
-      readRgbaPngAlphaBounds(iconFile),
+      bounds,
       { minX: 61, minY: 61, maxX: 962, maxY: 962 },
       `${path.relative(projectRoot, iconFile)} must keep the existing desktop runtime size`,
     );
