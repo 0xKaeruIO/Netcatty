@@ -231,29 +231,6 @@ export const sshKeyFromCatalog = (
   };
 };
 
-const LOCAL_ONLY_KEYS = [
-  "password",
-  "savePassword",
-  "identityId",
-  "identityFileId",
-  "identityFilePaths",
-  "authMethod",
-  "authPolicyVersion",
-  "useSshAgent",
-  "identityAgent",
-  "addKeysToAgent",
-  "useKeychain",
-  "pinned",
-  "lastConnectedAt",
-  "theme",
-  "themeOverride",
-  "fontFamily",
-  "fontFamilyOverride",
-  "fontSize",
-  "fontSizeOverride",
-  "order",
-] as const;
-
 export const catalogGroupPath = (centerName: string, catalogGroup: string): string => {
   const root = centerName.trim() || "Org";
   const nested = catalogGroup.trim().replace(/^\/+|\/+$/g, "");
@@ -276,7 +253,7 @@ export const hostFromCatalog = (
   remoteCenterId?: string,
 ): Host => {
   const group = catalogGroupPath(center.name, catalogHost.group);
-  const next: Host = {
+  const catalogFields: Host = {
     id: orgHostId(
       catalogIdNamespace(center, remoteCenterId ? { center: { id: remoteCenterId, name: center.name } } : undefined),
       catalogHost.id,
@@ -293,14 +270,8 @@ export const hostFromCatalog = (
     notes: catalogHost.notes || undefined,
     orgCenterId: center.id,
   };
-  if (existing) {
-    for (const key of LOCAL_ONLY_KEYS) {
-      const value = existing[key];
-      if (value !== undefined) {
-        (next as unknown as Record<string, unknown>)[key] = value;
-      }
-    }
-  }
+  // Keep client-only settings Center does not store (icon, color, hostChain, theme, …).
+  const next: Host = existing ? { ...existing, ...catalogFields } : catalogFields;
   applyCatalogCredentials(next, catalogHost, catalogIdNamespace(
     center,
     remoteCenterId ? { center: { id: remoteCenterId, name: center.name } } : undefined,

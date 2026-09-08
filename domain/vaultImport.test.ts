@@ -1072,6 +1072,49 @@ test("applyVaultHostImport skips duplicates by default", () => {
   assert.equal(merged.hosts.length, 2);
 });
 
+test("applyVaultHostImport remaps jump hosts that already exist in the vault", () => {
+  const existingJump: Host = {
+    id: "existing-jump",
+    label: "bastion",
+    hostname: "10.0.1.5",
+    username: "ops",
+    port: 22,
+    group: "ops/jump",
+    tags: [],
+    os: "linux",
+  };
+  const imported = importVaultHostsFromText("json", JSON.stringify({
+    hosts: [
+      {
+        label: "bastion",
+        hostname: "10.0.1.5",
+        port: 22,
+        username: "ops",
+        group: "ops/jump",
+      },
+      {
+        label: "web",
+        hostname: "10.0.1.12",
+        port: 22,
+        username: "deploy",
+        group: "ops/web",
+        hostChain: [{
+          label: "bastion",
+          hostname: "10.0.1.5",
+          port: 22,
+          username: "ops",
+          group: "ops/jump",
+        }],
+      },
+    ],
+  }));
+  const merged = applyVaultHostImport([existingJump], ["ops/jump"], imported);
+  const web = merged.hosts.find((host) => host.label === "web");
+  assert.equal(merged.addedCount, 1);
+  assert.ok(web);
+  assert.deepEqual(web.hostChain?.hostIds, ["existing-jump"]);
+});
+
 test("CSV import keeps same-endpoint rows that use different groups", () => {
   const result = importVaultHostsFromText(
     "csv",

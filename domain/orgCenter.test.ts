@@ -214,6 +214,57 @@ test("catalog credentials overwrite previous local password on the same org host
   assert.equal(result.hosts[0].authMethod, "password");
 });
 
+test("catalog sync keeps local icon, color, hostChain, and other client-only settings", () => {
+  const existing: Host = {
+    ...hostFromCatalog(center, {
+      id: "h1",
+      label: "old",
+      hostname: "10.0.0.1",
+      port: 22,
+      username: "root",
+      group: "",
+      tags: [],
+      os: "linux",
+      protocol: "ssh",
+      notes: "old notes",
+      updatedAt: 1,
+    }),
+    iconMode: "custom",
+    iconId: "shield",
+    iconColorMode: "manual",
+    iconColor: "red",
+    hostChain: { hostIds: ["local-jump"] },
+    theme: "dracula",
+    themeOverride: true,
+    distroMode: "manual",
+    manualDistro: "ubuntu",
+  };
+  const result = applyOrgCenterCatalog([existing], ["Ops"], center, catalog([{
+    id: "h1",
+    label: "web-1",
+    hostname: "10.0.1.12",
+    port: 2222,
+    username: "deploy",
+    group: "web",
+    tags: ["prod"],
+    os: "linux",
+    protocol: "ssh",
+    notes: "入口",
+    updatedAt: 2,
+  }]));
+  assert.equal(result.hosts[0].label, "web-1");
+  assert.equal(result.hosts[0].hostname, "10.0.1.12");
+  assert.equal(result.hosts[0].notes, "入口");
+  assert.equal(result.hosts[0].iconMode, "custom");
+  assert.equal(result.hosts[0].iconId, "shield");
+  assert.equal(result.hosts[0].iconColorMode, "manual");
+  assert.equal(result.hosts[0].iconColor, "red");
+  assert.deepEqual(result.hosts[0].hostChain, { hostIds: ["local-jump"] });
+  assert.equal(result.hosts[0].theme, "dracula");
+  assert.equal(result.hosts[0].themeOverride, true);
+  assert.equal(result.hosts[0].manualDistro, "ubuntu");
+});
+
 test("applyOrgCenterCatalog updates catalog fields but keeps local secrets", () => {
   const existing: Host = {
     ...hostFromCatalog(center, {

@@ -9,6 +9,14 @@ import {
 } from "../vaultHostCreate";
 import type { VaultImportIssue, VaultImportResult } from "../vaultImport";
 
+export interface VaultJsonHostChainHop {
+  label: string;
+  hostname: string;
+  port: number;
+  username: string;
+  group: string;
+}
+
 export interface VaultJsonHostRecord {
   label: string;
   hostname: string;
@@ -28,6 +36,7 @@ export interface VaultJsonHostRecord {
   startupCommandRules: StartupCommandRule[];
   visibility: string;
   visibleKeyIds: string[];
+  hostChain?: VaultJsonHostChainHop[];
 }
 
 export interface VaultJsonHostList {
@@ -128,9 +137,44 @@ export const looksLikeVaultHostListJson = (text: string): boolean => {
   }
 };
 
+const hopPort = (host: Host): number => (
+  host.protocol === "telnet"
+    ? (host.telnetPort ?? host.port ?? 23)
+    : (host.port ?? 22)
+);
+
+const toExportHop = (host: Host): VaultJsonHostChainHop => ({
+  label: host.label || host.hostname,
+  hostname: host.hostname,
+  port: hopPort(host),
+  username: host.protocol === "telnet"
+    ? (host.telnetUsername ?? host.username ?? "")
+    : (host.username ?? ""),
+  group: host.group ?? "",
+});
+
+const collectExportHosts = (allHosts: Host[], scopedHosts: Host[]): Host[] => {
+  const byId = new Map(allHosts.map((host) => [host.id, host]));
+  const seen = new Set<string>();
+  const ordered: Host[] = [];
+  const add = (host: Host | undefined) => {
+    if (!host || seen.has(host.id) || isUnsupportedExportHost(host)) return;
+    seen.add(host.id);
+    ordered.push(host);
+  };
+  for (const host of scopedHosts) add(host);
+  for (let i = 0; i < ordered.length; i++) {
+    for (const hopId of ordered[i].hostChain?.hostIds ?? []) {
+      add(byId.get(hopId));
+    }
+  }
+  return ordered;
+};
+
 const toExportHost = (
   host: Host,
   options: VaultJsonExportOptions,
+  allHosts: Host[],
 ): VaultJsonHostRecord => {
   const isTelnet = host.protocol === "telnet";
   const auth = resolveHostAuth({
@@ -152,6 +196,11 @@ const toExportHost = (
   const port = isTelnet
     ? (host.telnetPort ?? host.port ?? 23)
     : (host.port ?? 22);
+  const byId = new Map(allHosts.map((entry) => [entry.id, entry]));
+  const hostChain = (host.hostChain?.hostIds ?? [])
+    .map((hopId) => byId.get(hopId))
+    .filter((hop): hop is Host => Boolean(hop) && !isUnsupportedExportHost(hop))
+    .map(toExportHop);
 
   return {
     label: host.label || host.hostname,
@@ -172,6 +221,7 @@ const toExportHost = (
     startupCommandRules: [...(host.startupCommandRules ?? [])],
     visibility: "all",
     visibleKeyIds: [],
+    ...(hostChain.length > 0 ? { hostChain } : {}),
   };
 };
 
@@ -183,10 +233,10 @@ export const exportVaultHostsToJson = (
 ): VaultJsonExportResult => {
   const scopedHosts = rootGroup ? collectHostsInGroupTree(hosts, rootGroup) : hosts;
   const skippedHosts = scopedHosts.filter(isUnsupportedExportHost);
-  const exportableHosts = scopedHosts.filter((host) => !isUnsupportedExportHost(host));
+  const exportableHosts = collectExportHosts(hosts, scopedHosts);
   const payload: VaultJsonHostList = {
     groups: collectGroupExportPaths(groups, exportableHosts, rootGroup),
-    hosts: exportableHosts.map((host) => toExportHost(host, options)),
+    hosts: exportableHosts.map((host) => toExportHost(host, options, hosts)),
   };
   return {
     json: `${JSON.stringify(payload, null, 2)}\n`,
@@ -196,9 +246,87 @@ export const exportVaultHostsToJson = (
   };
 };
 
+const hopMatchKey = (
+  hostname: string,
+  port: number,
+  username: string,
+  group?: string,
+): string => (
+  `${hostname.trim().toLowerCase()}|${port || 22}|${username.trim()}|${group?.trim() ?? ""}`
+);
+
+const parseHostChainHops = (value: unknown): VaultJsonHostChainHop[] => {
+  const fromEntry = (entry: unknown): VaultJsonHostChainHop | undefined => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return undefined;
+    const record = entry as Record<string, unknown>;
+    const hostname = asString(record.hostname).trim();
+    if (!hostname) return undefined;
+    const portRaw = Number(record.port);
+    return {
+      label: asString(record.label).trim(),
+      hostname,
+      port: Number.isFinite(portRaw) && portRaw > 0 ? portRaw : 22,
+      username: asString(record.username).trim(),
+      group: asString(record.group).trim(),
+    };
+  };
+  if (Array.isArray(value)) {
+    return value.map(fromEntry).filter((hop): hop is VaultJsonHostChainHop => Boolean(hop));
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (Array.isArray(record.hops)) return parseHostChainHops(record.hops);
+  }
+  return [];
+};
+
+const resolveImportedHostChain = (
+  hosts: Host[],
+  hopsByHost: WeakMap<Host, VaultJsonHostChainHop[]>,
+  issues: VaultImportIssue[],
+): void => {
+  const byExact = new Map<string, Host>();
+  const byEndpoint = new Map<string, Host>();
+  const byLabel = new Map<string, Host>();
+  for (const host of hosts) {
+    const port = host.port ?? 22;
+    const username = host.username ?? "";
+    byExact.set(hopMatchKey(host.hostname, port, username, host.group), host);
+    byEndpoint.set(hopMatchKey(host.hostname, port, username), host);
+    const label = (host.label || host.hostname).trim().toLowerCase();
+    if (label) byLabel.set(label, host);
+    byLabel.set(host.hostname.trim().toLowerCase(), host);
+  }
+  const matchHop = (hop: VaultJsonHostChainHop): Host | undefined => (
+    byExact.get(hopMatchKey(hop.hostname, hop.port, hop.username, hop.group))
+    || byEndpoint.get(hopMatchKey(hop.hostname, hop.port, hop.username))
+    || (hop.label ? byLabel.get(hop.label.trim().toLowerCase()) : undefined)
+    || byLabel.get(hop.hostname.trim().toLowerCase())
+  );
+
+  for (const host of hosts) {
+    const hops = hopsByHost.get(host);
+    if (!hops?.length) continue;
+    const hostIds: string[] = [];
+    for (const hop of hops) {
+      const matched = matchHop(hop);
+      if (!matched || matched.id === host.id) {
+        issues.push({
+          level: "warning",
+          message: `JSON host "${host.label}": jump host ${hop.hostname} was not found in this file.`,
+        });
+        continue;
+      }
+      if (!hostIds.includes(matched.id)) hostIds.push(matched.id);
+    }
+    if (hostIds.length > 0) host.hostChain = { hostIds };
+  }
+};
+
 const hostInputFromRecord = (record: Record<string, unknown>): {
   host: Host;
   key?: SSHKey;
+  hops: VaultJsonHostChainHop[];
 } | { error: string } => {
   const protocolRaw = asString(record.protocol).trim().toLowerCase();
   const protocol = protocolRaw === "telnet" ? "telnet" : protocolRaw === "ssh" || protocolRaw === "ssh2" || !protocolRaw
@@ -268,9 +396,9 @@ const hostInputFromRecord = (record: Record<string, unknown>): {
     };
     host.identityFileId = key.id;
     host.authMethod = host.password ? host.authMethod : "key";
-    return { host, key };
+    return { host, key, hops: parseHostChainHops(record.hostChain) };
   }
-  return { host };
+  return { host, hops: parseHostChainHops(record.hostChain) };
 };
 
 const parseHostRecords = (
@@ -279,12 +407,14 @@ const parseHostRecords = (
   hosts: Host[];
   keys: SSHKey[];
   issues: VaultImportIssue[];
+  hopsByHost: WeakMap<Host, VaultJsonHostChainHop[]>;
   parsed: number;
   skipped: number;
 } => {
   const hosts: Host[] = [];
   const keys: SSHKey[] = [];
   const issues: VaultImportIssue[] = [];
+  const hopsByHost = new WeakMap<Host, VaultJsonHostChainHop[]>();
   let parsed = 0;
   let skipped = 0;
   for (let i = 0; i < records.length; i++) {
@@ -299,9 +429,10 @@ const parseHostRecords = (
       continue;
     }
     hosts.push(result.host);
+    hopsByHost.set(result.host, result.hops);
     if (result.key) keys.push(result.key);
   }
-  return { hosts, keys, issues, parsed, skipped };
+  return { hosts, keys, issues, hopsByHost, parsed, skipped };
 };
 
 export const importVaultHostsFromJson = (text: string): VaultImportResult => {
@@ -370,6 +501,7 @@ export const importVaultHostsFromJson = (text: string): VaultImportResult => {
     seen.add(key);
     return true;
   });
+  resolveImportedHostChain(uniqueHosts, imported.hopsByHost, imported.issues);
   const retainedKeyIds = new Set(uniqueHosts.map((host) => host.identityFileId).filter(Boolean));
   const keys = imported.keys.filter((key) => retainedKeyIds.has(key.id));
   const hostGroups = uniqueHosts.map((host) => host.group).filter((group): group is string => Boolean(group));

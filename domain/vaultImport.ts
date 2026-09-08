@@ -277,7 +277,7 @@ export function applyVaultImportDestination(
 
   return {
     ...result,
-    hosts,
+    hosts: hosts.map((host) => remapHostChainIds(host, remapHostId)),
     groups: [group],
     keyPassphrases: remapKeyPassphrases(result.keyPassphrases, { matchSelectedKey: true }),
     // Keep remapped candidates for alias conflict checks (same as CSV same-group
@@ -317,6 +317,28 @@ const splitTags = (raw: string | undefined): string[] => {
     .split(/[,;，]/g)
     .map((t) => t.trim())
     .filter(Boolean);
+};
+
+const remapHostChainIds = (
+  host: Host,
+  remapId: (hostId: string) => string | undefined,
+): Host => {
+  const ids = host.hostChain?.hostIds ?? [];
+  if (ids.length === 0) return host;
+  const nextIds: string[] = [];
+  for (const hopId of ids) {
+    const nextId = remapId(hopId);
+    if (!nextId || nextId === host.id || nextIds.includes(nextId)) continue;
+    nextIds.push(nextId);
+  }
+  if (nextIds.length === 0) {
+    const { hostChain: _hostChain, ...rest } = host;
+    return rest;
+  }
+  if (nextIds.length === ids.length && nextIds.every((id, index) => id === ids[index])) {
+    return host;
+  }
+  return { ...host, hostChain: { hostIds: nextIds } };
 };
 
 const hostKey = buildVaultHostMergeKey;
@@ -1523,20 +1545,31 @@ export function applyVaultHostImport(
     });
   }
 
+  const importedById = new Map(importResult.hosts.map((host) => [host.id, host]));
+  const existingByMergeKey = new Map(existingHosts.map((host) => [buildVaultHostMergeKey(host), host]));
+  const newHostIds = new Set(newHosts.map((host) => host.id));
+  const remapImportedHopId = (hopId: string): string | undefined => {
+    if (newHostIds.has(hopId)) return hopId;
+    const importedHop = importedById.get(hopId);
+    if (!importedHop) return undefined;
+    return existingByMergeKey.get(buildVaultHostMergeKey(importedHop))?.id;
+  };
+  const remappedNewHosts = newHosts.map((host) => remapHostChainIds(host, remapImportedHopId));
+
   const customGroups = Array.from(
     new Set([
       ...existingGroups,
       ...importResult.groups,
-      ...newHosts.map((host) => host.group).filter(Boolean),
+      ...remappedNewHosts.map((host) => host.group).filter(Boolean),
     ]),
   ) as string[];
 
   return {
-    hosts: [...existingHosts, ...newHosts].map(sanitizeHost),
+    hosts: [...existingHosts, ...remappedNewHosts].map(sanitizeHost),
     customGroups,
-    addedCount: newHosts.length,
+    addedCount: remappedNewHosts.length,
     skippedExistingCount,
-    addedHosts: newHosts,
+    addedHosts: remappedNewHosts,
   };
 }
 

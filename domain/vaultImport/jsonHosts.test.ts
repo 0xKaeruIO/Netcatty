@@ -136,6 +136,96 @@ test("JSON export is plaintext and round-trips through import", () => {
   assert.equal(imported.keys?.[0]?.privateKey.includes("SECRET"), true);
 });
 
+test("JSON export writes hostChain hops and import remaps them", () => {
+  const jump: Host = {
+    id: "jump-1",
+    label: "bastion",
+    hostname: "10.0.1.5",
+    username: "ops",
+    port: 22,
+    group: "ops/jump",
+    tags: [],
+    os: "linux",
+  };
+  const target: Host = {
+    id: "target-1",
+    label: "web",
+    hostname: "10.0.1.12",
+    username: "deploy",
+    port: 22,
+    group: "ops/web",
+    tags: [],
+    os: "linux",
+    hostChain: { hostIds: ["jump-1"] },
+  };
+  const exported = exportVaultHostsToJson([jump, target], ["ops", "ops/jump", "ops/web"]);
+  assert.equal(exported.exportedCount, 2);
+  assert.deepEqual(exported.payload.hosts.find((host) => host.label === "web")?.hostChain, [{
+    label: "bastion",
+    hostname: "10.0.1.5",
+    port: 22,
+    username: "ops",
+    group: "ops/jump",
+  }]);
+  assert.doesNotMatch(exported.json, /"id":/);
+  assert.match(exported.json, /"hostChain"/);
+
+  const imported = importVaultHostsFromJson(exported.json);
+  const importedWeb = imported.hosts.find((host) => host.label === "web");
+  const importedJump = imported.hosts.find((host) => host.label === "bastion");
+  assert.ok(importedWeb);
+  assert.ok(importedJump);
+  assert.deepEqual(importedWeb.hostChain?.hostIds, [importedJump.id]);
+});
+
+test("group JSON export includes jump hosts outside the selected subtree", () => {
+  const jump: Host = {
+    id: "jump-1",
+    label: "bastion",
+    hostname: "10.0.1.5",
+    username: "ops",
+    port: 22,
+    group: "ops/jump",
+    tags: [],
+    os: "linux",
+  };
+  const web: Host = {
+    id: "h1",
+    label: "web",
+    hostname: "10.0.0.1",
+    username: "root",
+    tags: [],
+    os: "linux",
+    group: "ops/web",
+    hostChain: { hostIds: ["jump-1"] },
+  };
+  const exported = exportVaultHostsToJson(
+    [web, jump],
+    ["ops", "ops/web", "ops/jump"],
+    {},
+    "ops/web",
+  );
+  assert.equal(exported.exportedCount, 2);
+  assert.equal(exported.payload.hosts[0].label, "web");
+  assert.equal(exported.payload.hosts[1].label, "bastion");
+  assert.equal(exported.payload.hosts[0].hostChain?.[0]?.hostname, "10.0.1.5");
+});
+
+test("JSON import ignores Center-style hostIds and unresolved hops", () => {
+  const result = importVaultHostsFromJson(JSON.stringify({
+    hosts: [{
+      label: "web",
+      hostname: "10.0.1.12",
+      port: 22,
+      username: "deploy",
+      group: "ops",
+      hostChain: { hostIds: ["missing-jump"] },
+    }],
+  }));
+  assert.equal(result.hosts.length, 1);
+  assert.equal(result.hosts[0].hostChain, undefined);
+});
+
 test("group JSON export stays inside the selected subtree", () => {
   const web: Host = {
     id: "h1",
