@@ -553,6 +553,9 @@ const SettingsPageContent: React.FC<{ settings: SettingsState; appLock?: AppLock
                                 setWindowOpacity={settings.setWindowOpacity}
                                 appIconVariant={settings.appIconVariant}
                                 setAppIconVariant={settings.setAppIconVariant}
+                                terminalBackgroundImage={settings.terminalSettings.backgroundImage}
+                                setTerminalBackgroundImage={(next) =>
+                                    settings.updateTerminalSetting("backgroundImage", next)}
                             />
                         </SettingsLazyTab>
                     )}

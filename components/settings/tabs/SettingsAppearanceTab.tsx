@@ -18,6 +18,8 @@ import {
   STORAGE_KEY_VAULT_NOTES_CODE_FONT_SIZE,
 } from "../../../infrastructure/config/storageKeys";
 import { resolveAppIconVariant, type AppIconVariant } from "../../../domain/appIconVariant";
+import type { TerminalBackgroundImageSettings } from "../../../domain/terminalBackgroundImage";
+import { TerminalBackgroundSettings } from "../TerminalBackgroundSettings";
 import { resolveNoteFontSelectionFamily, resolveNoteFontSelectionId } from "../../../domain/noteFonts";
 import { DEFAULT_AUTO_IMPORT_SYSTEM_KNOWN_HOSTS } from "../../../domain/systemKnownHostsAutoImport";
 import { cn } from "../../../lib/utils";
@@ -68,6 +70,8 @@ function SettingsAppearanceTab(props: {
   setWindowOpacity: (opacity: number) => void;
   appIconVariant: AppIconVariant;
   setAppIconVariant: (variant: AppIconVariant) => void;
+  terminalBackgroundImage: TerminalBackgroundImageSettings;
+  setTerminalBackgroundImage: (settings: TerminalBackgroundImageSettings) => void;
 }) {
   const { t } = useI18n();
   const availableUIFonts = useAvailableUIFonts();
@@ -137,6 +141,8 @@ function SettingsAppearanceTab(props: {
     setWindowOpacity,
     appIconVariant,
     setAppIconVariant,
+    terminalBackgroundImage,
+    setTerminalBackgroundImage,
   } = props;
   const resolvedAppIconVariant = resolveAppIconVariant(appIconVariant);
 
@@ -403,6 +409,11 @@ function SettingsAppearanceTab(props: {
           </div>
         )}
       </div>
+
+      <TerminalBackgroundSettings
+        settings={terminalBackgroundImage}
+        onChange={setTerminalBackgroundImage}
+      />
 
       <SectionHeader title={t("settings.appearance.appIcon")} />
       <SettingsAnchor anchorId="appearance-app-icon" className="rounded-lg border bg-card px-4 py-3 space-y-4">

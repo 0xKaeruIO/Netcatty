@@ -1475,6 +1475,16 @@ function createPreloadApi(ctx) {
     ipcRenderer.invoke("netcatty:tempdir:getPath"),
   openTempDir: () =>
     ipcRenderer.invoke("netcatty:tempdir:open"),
+
+  // Terminal background images (Settings > Appearance)
+  importTerminalBackgroundImage: (sourcePath) =>
+    ipcRenderer.invoke("netcatty:terminalBackground:import", { sourcePath }),
+  readTerminalBackgroundImage: (id) =>
+    ipcRenderer.invoke("netcatty:terminalBackground:read", { id }),
+  removeTerminalBackgroundImage: (id) =>
+    ipcRenderer.invoke("netcatty:terminalBackground:remove", { id }),
+  pruneTerminalBackgroundImages: (keepIds) =>
+    ipcRenderer.invoke("netcatty:terminalBackground:prune", { keepIds }),
   getToolOutputPersistenceStatus: () =>
     ipcRenderer.invoke("netcatty:tempdir:toolOutputPersistenceStatus"),
   writeToolOutputTemp: (record, content) =>

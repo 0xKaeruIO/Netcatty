@@ -98,6 +98,7 @@ function createBridgeRegistrar(context) {
     getCloudSyncBridge,
     getFileWatcherBridge,
     getTempDirBridge,
+    getTerminalBackgroundBridge,
     getSessionLogsBridge,
     getCompressUploadBridge,
     getGlobalShortcutBridge,
@@ -495,6 +496,7 @@ function createBridgeRegistrar(context) {
     cloudSyncBridge.registerHandlers(ipcMain, electronModule);
     fileWatcherBridge.registerHandlers(ipcMain, { terminalWorkerManager });
     tempDirBridge.registerHandlers(ipcMain, shell, electronModule);
+    getTerminalBackgroundBridge().registerHandlers(ipcMain, electronModule);
     sessionLogsBridge.registerHandlers(ipcMain, { terminalWorkerManager });
     compressUploadBridge.registerHandlers(ipcMain, { terminalWorkerManager });
     globalShortcutBridge.registerHandlers(ipcMain);

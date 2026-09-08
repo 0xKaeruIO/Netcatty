@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  applyTerminalThemeSync,
+  buildXtermTheme,
   cancelTerminalThemeUpdate,
   resetTerminalThemeSchedulerForTests,
   scheduleTerminalThemeUpdate,
@@ -79,4 +81,46 @@ test('hidden terminal theme updates do not wait for browser idle time', async ()
 
   await Promise.resolve();
   assert.equal(fakeTerm.options.theme.background, '#111111');
+});
+
+test('buildXtermTheme keeps the theme background unless a wallpaper is shown', () => {
+  assert.equal(buildXtermTheme(theme('opaque')).background, '#111111');
+  assert.equal(buildXtermTheme(theme('opaque'), false).background, '#111111');
+  assert.equal(buildXtermTheme(theme('wallpaper'), true).background, 'rgba(0, 0, 0, 0)');
+});
+
+test('a wallpaper turns on xterm transparency and clears its background fill', () => {
+  resetTerminalThemeSchedulerForTests();
+  const fakeTerm = {
+    options: { allowTransparency: false, theme: {} as Record<string, string> },
+  };
+
+  applyTerminalThemeSync(fakeTerm as never, theme('wallpaper'), true);
+  assert.equal(fakeTerm.options.allowTransparency, true);
+  assert.equal(fakeTerm.options.theme.background, 'rgba(0, 0, 0, 0)');
+  // Non-background colors still come from the terminal theme.
+  assert.equal(fakeTerm.options.theme.foreground, '#eeeeee');
+
+  applyTerminalThemeSync(fakeTerm as never, theme('wallpaper'), false);
+  assert.equal(fakeTerm.options.allowTransparency, false);
+  assert.equal(fakeTerm.options.theme.background, '#111111');
+});
+
+test('scheduled hidden-pane updates carry the transparency flag', async () => {
+  resetTerminalThemeSchedulerForTests();
+  const fakeTerm = {
+    options: { allowTransparency: false, theme: {} as Record<string, string> },
+  };
+
+  scheduleTerminalThemeUpdate(
+    'session-3',
+    theme('wallpaper'),
+    { visible: false, focused: false },
+    () => fakeTerm as never,
+    true,
+  );
+
+  await Promise.resolve();
+  assert.equal(fakeTerm.options.allowTransparency, true);
+  assert.equal(fakeTerm.options.theme.background, 'rgba(0, 0, 0, 0)');
 });

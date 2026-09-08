@@ -25,7 +25,7 @@ const devContentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   "connect-src 'self' data: blob: ws: wss: https: http://localhost:5173",
-  "img-src 'self' data: https:",
+  "img-src 'self' data: blob: https:",
 ].join("; ");
 
 const devContentSecurityPolicyPlugin = () => ({
@@ -33,7 +33,7 @@ const devContentSecurityPolicyPlugin = () => ({
   apply: 'serve' as const,
   transformIndexHtml(html: string) {
     return html.replace(
-      /content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' data: blob: ws: wss: https:; img-src 'self' data: https:;"/,
+      /content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' data: blob: ws: wss: https:; img-src 'self' data: blob: https:;"/,
       `content="${devContentSecurityPolicy}"`,
     );
   },

@@ -35,6 +35,8 @@ import {
   shouldScrollOnTerminalPaste,
 } from "../../../domain/terminalScroll";
 import { resolveTerminalInlineImageAddonOptions } from "../../../domain/terminalInlineImages";
+import { isTerminalBackgroundImageConfigured } from "../../../domain/terminalBackgroundImage";
+import { buildXtermTheme } from "../terminalThemeScheduler";
 import {
   resolveHostTerminalFontFamilyId,
   resolveHostTerminalFontSize,
@@ -462,6 +464,7 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
       : undefined;
 
   const settings = ctx.terminalSettingsRef.current;
+  const hasBackgroundImage = isTerminalBackgroundImageConfigured(settings?.backgroundImage);
   const rendererType = settings?.rendererType ?? "auto";
   const bridge = netcattyBridge.get();
   const isLocalTerminalHost = ctx.host.protocol === "local";
@@ -602,14 +605,10 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
     },
     ...terminalAltKeyOptions(altIsMeta),
     wordSeparator,
-    theme: {
-      ...ctx.terminalTheme.colors,
-      selectionBackground: ctx.terminalTheme.colors.selection,
-      // Scrollbar theming (xterm 6.0) — derive from foreground color
-      scrollbarSliderBackground: ctx.terminalTheme.colors.foreground + '33', // 20% opacity
-      scrollbarSliderHoverBackground: ctx.terminalTheme.colors.foreground + '66', // 40% opacity
-      scrollbarSliderActiveBackground: ctx.terminalTheme.colors.foreground + '80', // 50% opacity
-    },
+    // A wallpaper is painted under the grid, so xterm must not fill its own
+    // opaque background over it.
+    allowTransparency: hasBackgroundImage || performanceConfig.options.allowTransparency,
+    theme: buildXtermTheme(ctx.terminalTheme, hasBackgroundImage),
   });
   installSearchDecorationTracker(term);
 

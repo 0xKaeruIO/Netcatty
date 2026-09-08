@@ -174,6 +174,7 @@ const getOnedriveAuthBridge = createLazyModule("./bridges/onedriveAuthBridge.cjs
 const getCloudSyncBridge = createLazyModule("./bridges/cloudSyncBridge.cjs");
 const getFileWatcherBridge = createLazyModule("./bridges/fileWatcherBridge.cjs");
 const getTempDirBridge = createLazyModule("./bridges/tempDirBridge.cjs");
+const getTerminalBackgroundBridge = createLazyModule("./bridges/terminalBackgroundBridge.cjs");
 const getSessionLogsBridge = createLazyModule("./bridges/sessionLogsBridge.cjs");
 const getCompressUploadBridge = createLazyModule("./bridges/compressUploadBridge.cjs");
 const getGlobalShortcutBridge = createLazyModule("./bridges/globalShortcutBridge.cjs");
@@ -561,6 +562,7 @@ const registerBridges = createBridgeRegistrar({
   getCloudSyncBridge,
   getFileWatcherBridge,
   getTempDirBridge,
+  getTerminalBackgroundBridge,
   getSessionLogsBridge,
   getCompressUploadBridge,
   getGlobalShortcutBridge,

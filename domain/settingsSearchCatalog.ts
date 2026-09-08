@@ -109,6 +109,13 @@ export const SETTINGS_SEARCH_CATALOG: readonly SettingsSearchEntry[] = [
     keywords: ["transparency", "透明"],
   },
   {
+    id: "appearance-terminal-background",
+    tab: "appearance",
+    labelKey: "settings.appearance.terminalBackground",
+    descriptionKey: "settings.appearance.terminalBackground.image.desc",
+    keywords: ["wallpaper", "background image", "opacity", "blur", "背景图", "壁纸", "透明度"],
+  },
+  {
     id: "appearance-theme",
     tab: "appearance",
     labelKey: "settings.appearance.theme",

@@ -13,6 +13,17 @@ import {
   TERMINAL_INLINE_IMAGE_SEQUENCE_LIMIT_MB_DEFAULT,
   TERMINAL_INLINE_IMAGE_STORAGE_LIMIT_MB_DEFAULT,
 } from '../terminalInlineImages';
+import {
+  DEFAULT_TERMINAL_BACKGROUND_IMAGE,
+  normalizeTerminalBackgroundImage,
+  type TerminalBackgroundImageSettings,
+} from '../terminalBackgroundImage';
+
+export type {
+  TerminalBackgroundFit,
+  TerminalBackgroundImageSettings,
+  TerminalBackgroundPosition,
+} from '../terminalBackgroundImage';
 
 // Terminal appearance settings
 export type CursorShape = 'block' | 'bar' | 'underline';
@@ -218,6 +229,8 @@ export interface TerminalSettings {
   inlineImageMaxMegapixels: number;
   /** Largest single inline image escape sequence, in MB, before decoding. */
   inlineImageSequenceLimitMb: number;
+  /** Wallpaper painted behind the terminal grid (Settings > Appearance). */
+  backgroundImage: TerminalBackgroundImageSettings;
   showLineTimestamps: boolean; // Show output timestamps in a side gutter
 
   // Autocomplete
@@ -453,6 +466,7 @@ export const normalizeTerminalSettings = (
     inlineImageSequenceLimitMb: normalizeInlineImageSequenceLimitMb(
       mergedSettings.inlineImageSequenceLimitMb,
     ),
+    backgroundImage: normalizeTerminalBackgroundImage(mergedSettings.backgroundImage),
     autocompleteGhostText: mergedSettings.autocompletePopupMenu
       ? false
       : mergedSettings.autocompleteGhostText,
@@ -550,6 +564,7 @@ const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   inlineImageStorageLimitMb: TERMINAL_INLINE_IMAGE_STORAGE_LIMIT_MB_DEFAULT,
   inlineImageMaxMegapixels: TERMINAL_INLINE_IMAGE_MAX_MEGAPIXELS_DEFAULT,
   inlineImageSequenceLimitMb: TERMINAL_INLINE_IMAGE_SEQUENCE_LIMIT_MB_DEFAULT,
+  backgroundImage: DEFAULT_TERMINAL_BACKGROUND_IMAGE,
   showLineTimestamps: false, // Opt-in: shows output timestamps beside terminal lines
   autocompleteEnabled: true, // Autocomplete enabled by default
   autocompleteGhostText: false, // Mutually exclusive with popup menu

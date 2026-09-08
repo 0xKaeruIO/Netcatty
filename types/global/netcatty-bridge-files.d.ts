@@ -61,6 +61,20 @@ declare global {
     clearTempDir?(): Promise<{ deletedCount: number; failedCount: number; error?: string }>;
     getTempDirPath?(): Promise<string>;
     openTempDir?(): Promise<{ success: boolean }>;
+
+    // Terminal background images (Settings > Appearance)
+    importTerminalBackgroundImage?(sourcePath: string): Promise<{
+      ok: boolean;
+      error?: string;
+      image?: { id: string; fileName: string; mediaType: string; byteLength: number };
+    }>;
+    readTerminalBackgroundImage?(id: string): Promise<{
+      id: string;
+      mediaType: string;
+      data: Uint8Array;
+    } | null>;
+    removeTerminalBackgroundImage?(id: string): Promise<{ ok: boolean }>;
+    pruneTerminalBackgroundImages?(keepIds: string[]): Promise<{ deletedCount: number }>;
     getToolOutputPersistenceStatus?(): Promise<{ durable: boolean; reason?: string }>;
     writeToolOutputTemp?(record: import('../../infrastructure/ai/harness/toolOutputStore').PersistedToolOutputRecord, content: string): Promise<{ ok: boolean; path?: string; manifestPath?: string; error?: string }>;
     restoreToolOutputTemp?(handleId: string, chatSessionId: string): Promise<{

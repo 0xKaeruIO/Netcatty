@@ -25,6 +25,9 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { TerminalSelectionAIOverlay } from './TerminalSelectionAIOverlay';
+import { TerminalBackgroundLayer } from './TerminalBackgroundLayer';
+import { isTerminalBackgroundImageConfigured } from '../../domain/terminalBackgroundImage';
+import { useTerminalBackgroundImageUrl } from '../../application/state/useTerminalBackgroundImage';
 import { getHistoryPreviewSelectionFromRoot } from './runtime/terminalHistoryScrollOverride';
 
 type TerminalViewContext = Record<string, any>;
@@ -403,6 +406,12 @@ function TerminalViewInner({ ctx, isPaneMagnified = false }: { ctx: TerminalView
   });
   const terminalBodyInset = 4;
   const showHostInfoBar = terminalSettings?.showHostInfoBar !== false;
+  const backgroundImageSettings = terminalSettings?.backgroundImage;
+  const backgroundImageUrl = useTerminalBackgroundImageUrl(
+    isTerminalBackgroundImageConfigured(backgroundImageSettings)
+      ? backgroundImageSettings.imageId
+      : null,
+  );
 
   // One-line "enable Network Device Mode" tip. The persisted once-per-host
   // lifecycle, eligibility, and cross-pane/window sync live in the application
@@ -1061,6 +1070,16 @@ function TerminalViewInner({ ctx, isPaneMagnified = false }: { ctx: TerminalView
               </button>
             </div>
           )}
+          {backgroundImageUrl && backgroundImageSettings && (
+            <TerminalBackgroundLayer
+              settings={backgroundImageSettings}
+              imageUrl={backgroundImageUrl}
+              top={terminalContentTop}
+              left={activeLineTimestampGutterWidth + terminalBodyInset}
+              right={terminalRightInset}
+              bottom={terminalBottomInset}
+            />
+          )}
           <div
             ref={containerRef}
             className="xterm-container absolute"
@@ -1071,7 +1090,8 @@ function TerminalViewInner({ ctx, isPaneMagnified = false }: { ctx: TerminalView
               right: terminalRightInset,
               bottom: terminalBottomInset,
               paddingLeft: 6,
-              backgroundColor: 'var(--terminal-ui-bg)',
+              // The wallpaper sits directly below; a solid fill here would hide it.
+              backgroundColor: backgroundImageUrl ? 'transparent' : 'var(--terminal-ui-bg)',
             }}
           />
           <TerminalTimestampGutter

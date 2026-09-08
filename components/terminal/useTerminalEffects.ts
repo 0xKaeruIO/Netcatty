@@ -31,6 +31,7 @@ import {
   shouldArmTerminalInterruptDisplayGateForProtocol,
 } from './runtime/terminalOutputPipeline';
 import { scheduleTerminalThemeUpdate, applyTerminalThemeSync, cancelTerminalThemeUpdate } from './terminalThemeScheduler';
+import { isTerminalBackgroundImageConfigured } from '../../domain/terminalBackgroundImage';
 import { injectTerminalPaneAppearanceVars } from '../../infrastructure/theme/terminalAppearanceVars';
 import {
   isTerminalAlternateScreenActive,
@@ -1060,7 +1061,9 @@ export function useTerminalEffects(ctx: TerminalEffectsContext) {
   }, [status]);
 
 
-  const effectiveThemeKey = `${effectiveTheme.id}:${effectiveTheme.colors.background}:${effectiveTheme.colors.foreground}:${effectiveTheme.colors.cursor}`;
+  // A wallpaper needs a see-through grid, so it participates in the theme key.
+  const hasBackgroundImage = isTerminalBackgroundImageConfigured(terminalSettings?.backgroundImage);
+  const effectiveThemeKey = `${effectiveTheme.id}:${effectiveTheme.colors.background}:${effectiveTheme.colors.foreground}:${effectiveTheme.colors.cursor}:${hasBackgroundImage}`;
 
   // Sync xterm theme before browser paint; apply synchronously on visible panes.
   useLayoutEffect(() => {
@@ -1069,7 +1072,7 @@ export function useTerminalEffects(ctx: TerminalEffectsContext) {
 
     if (isRendererActiveRef.current || isFocused) {
       cancelTerminalThemeUpdate(sessionId);
-      applyTerminalThemeSync(term, effectiveTheme);
+      applyTerminalThemeSync(term, effectiveTheme, hasBackgroundImage);
       injectTerminalPaneAppearanceVars(sessionId, effectiveTheme);
       return;
     }
@@ -1079,8 +1082,9 @@ export function useTerminalEffects(ctx: TerminalEffectsContext) {
       effectiveTheme,
       { visible: false, focused: false },
       () => termRef.current,
+      hasBackgroundImage,
     );
-  }, [effectiveThemeKey, isFocused, isVisible, sessionId, effectiveTheme]);
+  }, [effectiveThemeKey, hasBackgroundImage, isFocused, isVisible, sessionId, effectiveTheme]);
 
 
   // Keep font-size sync separate from terminalSettings so unrelated setting
