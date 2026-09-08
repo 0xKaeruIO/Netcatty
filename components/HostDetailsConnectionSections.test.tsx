@@ -35,6 +35,7 @@ const availableKey: SSHKey = {
 const renderConnectionSections = (
   formOverrides: Record<string, unknown> = {},
   groupDefaults?: Record<string, unknown>,
+  extraProps: Record<string, unknown> = {},
 ) =>
   renderToStaticMarkup(
     React.createElement(
@@ -83,6 +84,7 @@ const renderConnectionSections = (
         distroOptions: [],
         effectiveFormDistro: undefined,
         getDistroOptionLabel: () => "",
+        ...extraProps,
       }),
     ),
   );
@@ -350,15 +352,47 @@ test("an inherited deleted identity remains visible and clearable", () => {
   assert.doesNotMatch(markup, /placeholder="hostDetails\.username\.placeholder"/);
 });
 
+test("host details panel injects notes into the connection sections", () => {
+  const panelSource = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "HostDetailsPanel.tsx"),
+    "utf8",
+  );
+  const connectionCall = panelSource.indexOf("<HostDetailsConnectionSections");
+  const notesProp = panelSource.indexOf("notesSection={notesSection}");
+  const scripts = panelSource.indexOf("<HostDetailsScriptsSection");
+  const leftoverNotes = panelSource.indexOf('title={t("hostDetails.notes.label")}');
+  assert.ok(connectionCall >= 0);
+  assert.ok(notesProp > connectionCall);
+  assert.ok(scripts > notesProp);
+  assert.ok(leftoverNotes >= 0);
+  assert.ok(leftoverNotes < connectionCall);
+});
+
+test("notes render between address and port credentials", () => {
+  const markup = renderConnectionSections({}, undefined, {
+    notesSection: React.createElement("div", null, "Notes slot"),
+  });
+  const address = markup.indexOf("hostDetails.section.address");
+  const notes = markup.indexOf("Notes slot");
+  const portCredentials = markup.indexOf("hostDetails.section.portCredentials");
+  assert.ok(address >= 0);
+  assert.ok(notes > address);
+  assert.ok(portCredentials > notes);
+});
+
 test("proxy via hosts sits between port credentials and SFTP settings", () => {
   const source = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), "HostDetailsConnectionSections.tsx"),
     "utf8",
   );
+  const address = source.indexOf('hostDetails.section.address');
+  const notes = source.indexOf("{notesSection}");
   const portCredentials = source.indexOf('hostDetails.section.portCredentials');
   const jumpHosts = source.indexOf('hostDetails.jumpHosts');
   const sftp = source.indexOf('hostDetails.section.sftp');
-  assert.ok(portCredentials >= 0);
+  assert.ok(address >= 0);
+  assert.ok(notes > address);
+  assert.ok(portCredentials > notes);
   assert.ok(jumpHosts > portCredentials);
   assert.ok(sftp > jumpHosts);
 });

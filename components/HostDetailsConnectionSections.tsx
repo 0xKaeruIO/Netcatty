@@ -111,6 +111,7 @@ export const HostDetailsConnectionSections: React.FC<HostDetailsConnectionSectio
   chainedHosts = [],
   setActiveSubPanel,
   clearHostChain,
+  notesSection,
 }) => {
   const selectAuthMethod = (authMethod: "auto" | "password" | "key" | "certificate") => {
     setForm((previous: Host) => applyEffectiveHostAuthMethodSelection(
@@ -182,6 +183,8 @@ export const HostDetailsConnectionSections: React.FC<HostDetailsConnectionSectio
             </Select>
           </HostDetailsSettingRow>
         </HostDetailsSection>
+
+        {notesSection}
 
         <HostDetailsSection
           icon={<KeyRound size={14} className="text-muted-foreground" />}

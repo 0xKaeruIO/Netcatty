@@ -986,6 +986,35 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
     );
   }
 
+  const notesSection = (
+    <HostDetailsSection
+      icon={<FileText size={14} className="text-muted-foreground shrink-0" />}
+      title={t("hostDetails.notes.label")}
+      hint={t("hostDetails.notes.help")}
+      action={
+        <Switch
+          checked={showNotesEditor}
+          onCheckedChange={setShowNotesEditor}
+          aria-label={
+            showNotesEditor
+              ? t("hostDetails.notes.toggle.hide")
+              : t("hostDetails.notes.toggle.show")
+          }
+        />
+      }
+    >
+      {showNotesEditor ? (
+        <HostNotesEditor
+          panelKey={form.id}
+          value={form.notes ?? ""}
+          onChange={(notes) => update("notes", notes)}
+          showHeader={false}
+          defaultTab="edit"
+        />
+      ) : null}
+    </HostDetailsSection>
+  );
+
   return (
     <AsidePanel
       open={true}
@@ -1129,7 +1158,8 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
           chainedHosts={chainedHosts}
           setActiveSubPanel={setActiveSubPanel}
           clearHostChain={clearHostChain}
-        /> : null}
+          notesSection={notesSection}
+        /> : notesSection}
 
         {onSnippetsChange ? (
           <HostDetailsScriptsSection
@@ -1139,33 +1169,6 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
             t={t}
           />
         ) : null}
-
-        <HostDetailsSection
-          icon={<FileText size={14} className="text-muted-foreground shrink-0" />}
-          title={t("hostDetails.notes.label")}
-          hint={t("hostDetails.notes.help")}
-          action={
-            <Switch
-              checked={showNotesEditor}
-              onCheckedChange={setShowNotesEditor}
-              aria-label={
-                showNotesEditor
-                  ? t("hostDetails.notes.toggle.hide")
-                  : t("hostDetails.notes.toggle.show")
-              }
-            />
-          }
-        >
-          {showNotesEditor ? (
-            <HostNotesEditor
-              panelKey={form.id}
-              value={form.notes ?? ""}
-              onChange={(notes) => update("notes", notes)}
-              showHeader={false}
-              defaultTab="edit"
-            />
-          ) : null}
-        </HostDetailsSection>
 
         <HostDetailsAdvancedSections
           t={t}

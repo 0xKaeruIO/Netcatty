@@ -11,6 +11,7 @@ import {
   resolveVaultImportKeyPassphraseConflicts,
 } from "./vaultImport.ts";
 import { encodeCsvPassphrase } from "./vaultImport/csvCredentialFields.ts";
+import { MAX_XSHELL_DESCRIPTION_LENGTH } from "./vaultImport/xshell.ts";
 import type { Host } from "./models.ts";
 import { encryptXshellPassword } from "./xshellPassword.ts";
 
@@ -257,6 +258,26 @@ test("Xshell import decrypts the session password onto the host", () => {
     { expect: "password:", send: "secret" },
   ]);
   assert.equal(result.issues.some((issue) => /password/i.test(issue.message)), false);
+});
+
+test("Xshell import turns Description \\r\\n into host notes and caps at 2048", () => {
+  const result = importVaultHostsFromText("xshell", xshellSession({
+    description: "jump box\\r\\nline two",
+    password: "",
+    useExpectSend: "0",
+    expectSend: [],
+  }), { fileName: "jump.xsh" });
+
+  assert.equal(result.hosts[0]?.notes, "jump box\nline two");
+
+  const truncated = importVaultHostsFromText("xshell", xshellSession({
+    description: "x".repeat(3000),
+    password: "",
+    useExpectSend: "0",
+    expectSend: [],
+  }), { fileName: "long.xsh" });
+
+  assert.equal(truncated.hosts[0]?.notes?.length, MAX_XSHELL_DESCRIPTION_LENGTH);
 });
 
 test("Xshell import warns when the session password cannot be decrypted", () => {

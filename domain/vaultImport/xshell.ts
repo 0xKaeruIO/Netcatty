@@ -32,6 +32,23 @@ const GENERIC_SESSION_NOTES = new Set([
   "xftp session file",
 ]);
 
+export const MAX_XSHELL_DESCRIPTION_LENGTH = 2048;
+
+const normalizeXshellDescription = (raw: string | undefined): string | undefined => {
+  const decoded = (raw ?? "")
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\n")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .trim();
+  if (!decoded) return undefined;
+  if (GENERIC_SESSION_NOTES.has(decoded.toLowerCase())) return undefined;
+  return decoded.length > MAX_XSHELL_DESCRIPTION_LENGTH
+    ? decoded.slice(0, MAX_XSHELL_DESCRIPTION_LENGTH)
+    : decoded;
+};
+
 const parseIniSections = (text: string): Map<string, Map<string, string>> => {
   const sections = new Map<string, Map<string, string>>();
   let current = new Map<string, string>();
@@ -131,10 +148,7 @@ export function parseXshellSession(
   const protocolValue = normalizeXshellProtocol(connection.get("protocol"));
   const hostname = connection.get("host")?.trim() || undefined;
   const username = auth.get("username")?.trim() || undefined;
-  const notesRaw = connection.get("description")?.trim();
-  const notes = notesRaw && !GENERIC_SESSION_NOTES.has(notesRaw.toLowerCase())
-    ? notesRaw
-    : undefined;
+  const notes = normalizeXshellDescription(connection.get("description"));
   const encryptedPassword = auth.get("password")?.trim() || undefined;
   const sessionVersion = sessionInfo.get("version")?.trim() || undefined;
   const rules = parseExpectSendRules(auth);
