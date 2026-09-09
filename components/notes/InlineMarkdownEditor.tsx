@@ -84,6 +84,8 @@ export {
 } from "./noteClipboardPaste";
 
 import { NoteSourceEditor, type NoteSourceEditorHandle } from "./NoteSourceEditor";
+import { NoteFindBar } from "./NoteFindBar";
+import { useNoteFindController } from "./useNoteFindController";
 import {
   extractNoteHeadings,
   formatMarkdownListSelection,
@@ -980,9 +982,7 @@ export const InlineMarkdownEditor = React.memo(
       () => ({
         executeAction: (action: MarkdownActionType) => {
           if (controlledEditorMode === "source") {
-            if (sourceEditorRef && "current" in sourceEditorRef && sourceEditorRef.current) {
-              sourceEditorRef.current.insertAction(action);
-            }
+            localSourceEditorRef.current?.insertAction(action);
             return;
           }
 
@@ -1078,7 +1078,7 @@ export const InlineMarkdownEditor = React.memo(
         },
         scrollToHeading: (heading: NoteHeadingItem, headingIndex: number) => {
           if (controlledEditorMode === "source") {
-            return sourceEditorRef?.current?.scrollToLine(heading.line) ?? false;
+            return localSourceEditorRef.current?.scrollToLine(heading.line) ?? false;
           }
           if (mdxFallbackActiveRef.current) {
             return fallbackSourceEditorRef.current?.scrollToLine(heading.line) ?? false;
@@ -1090,7 +1090,7 @@ export const InlineMarkdownEditor = React.memo(
           return scrollNoteHeadingIntoView(containerRef.current, heading, occurrence);
         },
       }),
-      [controlledEditorMode, getSelectedText, sourceEditorRef, value],
+      [controlledEditorMode, getSelectedText, value],
     );
   const lastLinkActivationRef = useRef<{ href: string; at: number } | null>(null);
   const [hostPicker, setHostPicker] = useState<HostPickerState>({
@@ -1118,6 +1118,13 @@ export const InlineMarkdownEditor = React.memo(
   const mdxFallbackActiveRef = useRef(false);
   mdxFallbackActiveRef.current = mdxFallbackActive;
   const fallbackSourceEditorRef = useRef<NoteSourceEditorHandle | null>(null);
+  const localSourceEditorRef = useRef<NoteSourceEditorHandle | null>(null);
+  const assignSourceEditorRef = useCallback((handle: NoteSourceEditorHandle | null) => {
+    localSourceEditorRef.current = handle;
+    if (sourceEditorRef && "current" in sourceEditorRef) {
+      sourceEditorRef.current = handle;
+    }
+  }, [sourceEditorRef]);
   const hostPickerRangeRef = useRef<Range | null>(null);
   const hostPickerListRef = useRef<FixedSizeVirtualListHandle>(null);
   const hostsRef = useRef(hosts);
@@ -1186,6 +1193,15 @@ export const InlineMarkdownEditor = React.memo(
     () => normalizeNotePublicAssetPaths(value),
     [value],
   );
+  const sourceFindEnabled = editorMode === "source";
+  const noteFind = useNoteFindController({
+    containerRef,
+    enabled: sourceFindEnabled,
+    sourceSurface: sourceFindEnabled,
+    getSourceEditor: () => localSourceEditorRef.current,
+    getSelectedText,
+    contentKey: `${noteId ?? ""}:${editorMode}:${acceptedSourceMarkdown}`,
+  });
 
   const plugins = useMemo(() => [
     headingsPlugin(),
@@ -1261,6 +1277,7 @@ export const InlineMarkdownEditor = React.memo(
       // note's unrenderable-markdown fallback.
       setMdxParseFailure(null);
       setMdxRetry(null);
+      noteFind.close();
       // Keep both refs in displayMarkdown space so public-path normalization
       // does not look like a divergent local draft.
       latestMarkdownRef.current = markdown;
@@ -2055,6 +2072,7 @@ export const InlineMarkdownEditor = React.memo(
     <div
       ref={containerRef}
       className="relative flex h-full flex-col"
+      data-note-editor="true"
       style={{
         ["--note-font-family" as string]: noteFontFamily || undefined,
         ["--note-font-size" as string]: noteFontSize ? `${noteFontSize}px` : undefined,
@@ -2076,6 +2094,11 @@ export const InlineMarkdownEditor = React.memo(
       onKeyDownCapture={(event) => {
         // Block edits while Lexical import is deferred/running (toolbar/IME too).
         if (blockWhileContentSwapping(event)) return;
+        if (hostPicker.open && event.key === "Escape") {
+          handleKeyDownCapture(event);
+          return;
+        }
+        if (noteFind.handleKeyDown(event)) return;
         handleKeyDownCapture(event);
       }}
       onKeyUpCapture={handleKeyUpCapture}
@@ -2100,6 +2123,16 @@ export const InlineMarkdownEditor = React.memo(
           aria-hidden="true"
         />
       )}
+      <NoteFindBar
+        open={sourceFindEnabled && noteFind.open}
+        value={noteFind.term}
+        focusToken={noteFind.focusToken}
+        matchCount={noteFind.matchCount}
+        onValueChange={noteFind.handleTermChange}
+        onClose={noteFind.close}
+        onFindNext={noteFind.findNext}
+        onFindPrevious={noteFind.findPrevious}
+      />
       {editorMode === "edit" && linkAction && (
         <button
           type="button"
@@ -2166,13 +2199,15 @@ export const InlineMarkdownEditor = React.memo(
       )}
       {editorMode === "source" ? (
         <NoteSourceEditor
-          ref={sourceEditorRef}
+          ref={assignSourceEditorRef}
           noteId={noteId}
           value={noteId !== undefined && noteId !== noteIdRef.current ? value : acceptedSourceMarkdown}
           placeholder={placeholder}
           onChange={commitSourceMarkdown}
           noteFontFamily={noteFontFamily}
           noteFontSize={noteCodeFontSize || noteFontSize}
+          findMatches={noteFind.open ? noteFind.matches : undefined}
+          findCurrentIndex={noteFind.currentIndex}
         />
       ) : mdxFallbackActive ? (
         <div

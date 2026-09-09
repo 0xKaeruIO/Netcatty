@@ -740,6 +740,24 @@ test("NoteSourceEditor manages local draft state to prevent cursor jumping on de
   assert.match(source, /onChange=\{handleChange\}/);
   assert.match(source, /prevNoteIdRef\.current/);
   assert.match(source, /prevValueRef\.current/);
+  assert.match(source, /rows=\{fillParent \? undefined : Math\.max\(lineCount, 16\)\}/);
+});
+
+test("unrenderable markdown fallback grows with the source instead of filling a collapsed parent", () => {
+  const source = readFileSync(new URL("./InlineMarkdownEditor.tsx", import.meta.url), "utf8");
+  assert.match(source, /data-note-markdown-source-fallback="true"[\s\S]*?fillParent=\{false\}/);
+  assert.doesNotMatch(source, /min-h-\[calc\(100vh-15rem\)\]/);
+});
+
+test("note editor find bar is available in source mode only", () => {
+  const source = readFileSync(new URL("./InlineMarkdownEditor.tsx", import.meta.url), "utf8");
+  assert.match(source, /<NoteFindBar/);
+  assert.match(source, /const sourceFindEnabled = editorMode === "source"/);
+  assert.match(source, /enabled: sourceFindEnabled/);
+  assert.doesNotMatch(
+    source,
+    /mdxFallbackActive \?[\s\S]*?findMatches=\{noteFind\.open \? noteFind\.matches : undefined\}/,
+  );
 });
 
 test("source mode compares raw markdown separately from display-normalized markdown", () => {

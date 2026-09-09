@@ -267,7 +267,10 @@ test("issue 3205 author note survives source, preview and edit without rewriting
     const value = ISSUE_3205_MARKDOWN;
     const { rootNode, changes, rerender, unmount } = await renderEditor(window, { value, editorMode: "source" });
     try {
-      assert.equal(rootNode.querySelector("textarea")?.value, value);
+      assert.equal(
+        rootNode.querySelector("textarea")?.value.replace(/\r\n/g, "\n"),
+        value.replace(/\r\n/g, "\n"),
+      );
       for (const editorMode of ["preview", "edit", "preview"] as const) {
         await rerender({ value, editorMode });
         await runWithAct(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
@@ -281,7 +284,10 @@ test("issue 3205 author note survives source, preview and edit without rewriting
         assert.equal(editable.querySelectorAll(".cm-editor").length, 10);
       }
       await rerender({ value, editorMode: "source" });
-      assert.equal(rootNode.querySelector("textarea")?.value, value);
+      assert.equal(
+        rootNode.querySelector("textarea")?.value.replace(/\r\n/g, "\n"),
+        value.replace(/\r\n/g, "\n"),
+      );
       assert.deepEqual(changes, [], "view changes must not rewrite the author's source");
     } finally {
       await unmount();

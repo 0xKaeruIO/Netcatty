@@ -1,5 +1,9 @@
 import React, { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { type MarkdownActionType, wrapMarkdownSyntax } from "../../domain/notes";
+import {
+  splitTextForFindHighlights,
+  type NoteFindMatch,
+} from "../../domain/notes/noteFind";
 
 const SOURCE_EDIT_UNDO_COALESCE_MS = 750;
 
@@ -60,6 +64,9 @@ export interface NoteSourceEditorHandle {
   insertAction: (action: MarkdownActionType) => void;
   focus: () => void;
   scrollToLine: (line: number) => boolean;
+  getValue: () => string;
+  getSelectionRange: () => { start: number; end: number };
+  revealTextRange: (start: number, end: number) => boolean;
 }
 
 export interface NoteSourceEditorProps {
@@ -79,6 +86,8 @@ export interface NoteSourceEditorProps {
    * textarea size of two rows.
    */
   fillParent?: boolean;
+  findMatches?: readonly NoteFindMatch[];
+  findCurrentIndex?: number;
 }
 
 export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSourceEditorProps>(
@@ -92,9 +101,12 @@ export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSou
     noteFontSize,
     readOnly = false,
     fillParent = true,
+    findMatches,
+    findCurrentIndex = -1,
   }, ref) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const lineNumbersRef = useRef<HTMLDivElement>(null);
+    const findHighlightRef = useRef<HTMLPreElement>(null);
     const [localValue, setLocalValue] = useState(value);
     const prevNoteIdRef = useRef(noteId);
     const prevValueRef = useRef(value);
@@ -159,9 +171,20 @@ export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSou
     );
     const gutterWidth = Math.max(48, String(lineCount).length * 9 + 24);
 
+    const findHighlightSegments = useMemo(
+      () => splitTextForFindHighlights(localValue, findMatches ?? [], findCurrentIndex),
+      [findCurrentIndex, findMatches, localValue],
+    );
+
     const handleScroll = () => {
-      if (textareaRef.current && lineNumbersRef.current) {
-        lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      if (lineNumbersRef.current) {
+        lineNumbersRef.current.scrollTop = textarea.scrollTop;
+      }
+      if (findHighlightRef.current) {
+        findHighlightRef.current.scrollTop = textarea.scrollTop;
+        findHighlightRef.current.scrollLeft = textarea.scrollLeft;
       }
     };
 
@@ -319,6 +342,11 @@ export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSou
       focus: () => {
         textareaRef.current?.focus();
       },
+      getValue: () => localValue,
+      getSelectionRange: () => ({
+        start: textareaRef.current?.selectionStart ?? 0,
+        end: textareaRef.current?.selectionEnd ?? 0,
+      }),
       scrollToLine: (line: number) => {
         const textarea = textareaRef.current;
         if (!textarea) return false;
@@ -331,6 +359,27 @@ export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSou
         if (lineNumbersRef.current) {
           lineNumbersRef.current.scrollTop = top;
         }
+        if (findHighlightRef.current) {
+          findHighlightRef.current.scrollTop = top;
+        }
+        return true;
+      },
+      revealTextRange: (start: number, end: number) => {
+        const textarea = textareaRef.current;
+        if (!textarea) return false;
+        const safeStart = Math.max(0, Math.min(start, localValue.length));
+        const safeEnd = Math.max(safeStart, Math.min(end, localValue.length));
+        const line = localValue.slice(0, safeStart).split("\n").length;
+        const top = Math.max(0, (Math.max(1, line) - 1) * 24 - 12);
+        textarea.scrollTop = top;
+        if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = top;
+        if (findHighlightRef.current) findHighlightRef.current.scrollTop = top;
+        const scroller = textarea.closest("[data-radix-scroll-area-viewport]");
+        if (scroller instanceof HTMLElement) {
+          const nextTop = Math.max(0, textarea.offsetTop + top - 48);
+          scroller.scrollTop = nextTop;
+        }
+        textarea.setSelectionRange(safeStart, safeEnd);
         return true;
       },
     }));
@@ -357,6 +406,31 @@ export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSou
 
         {/* Source Textarea */}
         <div className={`relative flex-1 min-w-0 ${fillParent ? "h-full" : ""}`}>
+          {findHighlightSegments.some((segment) => segment.kind !== "plain") && (
+            <pre
+              ref={findHighlightRef}
+              aria-hidden="true"
+              data-note-find-overlay="true"
+              style={{
+                fontFamily: noteFontFamily || undefined,
+                fontSize: noteFontSize ? `${noteFontSize}px` : undefined,
+              }}
+              className="pointer-events-none absolute inset-0 m-0 w-full overflow-hidden py-3 px-4 font-mono text-sm leading-6 whitespace-pre text-transparent"
+            >{findHighlightSegments.map((segment, index) => (
+              segment.kind === "plain" ? (
+                <span key={index}>{segment.text}</span>
+              ) : (
+                <mark
+                  key={index}
+                  className={segment.kind === "current"
+                    ? "rounded-sm bg-primary/55 text-transparent"
+                    : "rounded-sm bg-primary/25 text-transparent"}
+                >
+                  {segment.text}
+                </mark>
+              )
+            ))}</pre>
+          )}
           <textarea
             ref={textareaRef}
             rows={fillParent ? undefined : Math.max(lineCount, 16)}
@@ -392,7 +466,7 @@ export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSou
               fontFamily: noteFontFamily || undefined,
               fontSize: noteFontSize ? `${noteFontSize}px` : undefined,
             }}
-            className={`w-full py-3 px-4 bg-transparent text-foreground resize-none outline-none font-mono text-sm leading-6 whitespace-pre ${
+            className={`relative z-[1] w-full py-3 px-4 bg-transparent text-foreground resize-none outline-none font-mono text-sm leading-6 whitespace-pre ${
               fillParent ? "h-full overflow-auto" : "h-auto overflow-hidden"
             }`}
           />

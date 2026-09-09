@@ -985,6 +985,16 @@ html[data-theme-transition] *::after {
   line-height: 1.75;
 }
 
+::highlight(note-find-match) {
+  background-color: hsl(var(--primary) / 0.28);
+  color: inherit;
+}
+
+::highlight(note-find-current) {
+  background-color: hsl(var(--primary) / 0.55);
+  color: inherit;
+}
+
 .netcatty-mdx-editor,
 .netcatty-mdx-editor .mdxeditor-root-contenteditable {
   min-height: 100%;
