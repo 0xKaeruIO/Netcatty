@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   DEFAULT_TERMINAL_BACKGROUND_IMAGE,
+  TERMINAL_BACKGROUND_IMAGE_ENABLED,
   isTerminalBackgroundImageConfigured,
   normalizeTerminalBackgroundImage,
   resolveTerminalBackgroundLayerStyle,
@@ -21,6 +22,11 @@ const configured = normalizeTerminalBackgroundImage({
 test('normalize falls back to defaults for missing input', () => {
   assert.deepEqual(normalizeTerminalBackgroundImage(null), DEFAULT_TERMINAL_BACKGROUND_IMAGE);
   assert.deepEqual(normalizeTerminalBackgroundImage(undefined), DEFAULT_TERMINAL_BACKGROUND_IMAGE);
+});
+
+test('pack-time feature flag defaults to on in Node tests', () => {
+  assert.equal(TERMINAL_BACKGROUND_IMAGE_ENABLED, true);
+  assert.equal(isTerminalBackgroundImageConfigured(configured), true);
 });
 
 test('normalize cannot enable the wallpaper without an image', () => {

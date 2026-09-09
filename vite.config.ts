@@ -1,7 +1,23 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { createRequire } from 'node:module';
 import path from 'path';
 import { defineConfig, type Plugin } from 'vite';
+
+const require = createRequire(import.meta.url);
+const {
+  resolveTerminalBackgroundFeatureEnabled,
+  writeBakedTerminalBackgroundFeatureFlag,
+} = require('./scripts/terminalBackgroundFeatureFlag.cjs') as {
+  resolveTerminalBackgroundFeatureEnabled: (env?: NodeJS.ProcessEnv) => boolean;
+  writeBakedTerminalBackgroundFeatureFlag: (filePath: string, enabled: boolean) => void;
+};
+
+const terminalBackgroundEnabled = resolveTerminalBackgroundFeatureEnabled(process.env);
+writeBakedTerminalBackgroundFeatureFlag(
+  path.resolve(__dirname, 'electron/generated/featureFlags.cjs'),
+  terminalBackgroundEnabled,
+);
 
 // Custom plugin to suppress monaco-editor source map warnings
 const suppressMonacoSourcemapWarning = () => ({
@@ -68,6 +84,11 @@ const warnOnOutdatedOptimizeDep = (): Plugin => ({
 export default defineConfig(() => {
     return {
       base: "./",
+      define: {
+        'import.meta.env.VITE_TERMINAL_BACKGROUND': JSON.stringify(
+          terminalBackgroundEnabled ? '1' : '0',
+        ),
+      },
       server: {
         port: 5173,
         host: 'localhost',

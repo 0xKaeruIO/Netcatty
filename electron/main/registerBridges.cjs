@@ -15,6 +15,17 @@ function filterExcludedFigSpecs(specNames) {
   return specNames.filter((name) => !isExcludedFigSpec(name));
 }
 
+function isTerminalBackgroundImageEnabled() {
+  try {
+    return require("../generated/featureFlags.cjs").TERMINAL_BACKGROUND_IMAGE_ENABLED !== false;
+  } catch {
+    const raw = process.env.VITE_TERMINAL_BACKGROUND ?? process.env.NETCATTY_TERMINAL_BACKGROUND;
+    if (raw == null || String(raw).trim() === "") return true;
+    const normalized = String(raw).trim().toLowerCase();
+    return normalized !== "0" && normalized !== "false" && normalized !== "off";
+  }
+}
+
 function waitForApplicationSpawn(child, requireCleanLauncherExit = false) {
   return new Promise((resolve, reject) => {
     const onSpawn = () => {
@@ -496,7 +507,9 @@ function createBridgeRegistrar(context) {
     cloudSyncBridge.registerHandlers(ipcMain, electronModule);
     fileWatcherBridge.registerHandlers(ipcMain, { terminalWorkerManager });
     tempDirBridge.registerHandlers(ipcMain, shell, electronModule);
-    getTerminalBackgroundBridge().registerHandlers(ipcMain, electronModule);
+    if (isTerminalBackgroundImageEnabled()) {
+      getTerminalBackgroundBridge().registerHandlers(ipcMain, electronModule);
+    }
     sessionLogsBridge.registerHandlers(ipcMain, { terminalWorkerManager });
     compressUploadBridge.registerHandlers(ipcMain, { terminalWorkerManager });
     globalShortcutBridge.registerHandlers(ipcMain);

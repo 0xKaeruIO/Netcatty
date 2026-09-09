@@ -18,7 +18,10 @@ import {
   STORAGE_KEY_VAULT_NOTES_CODE_FONT_SIZE,
 } from "../../../infrastructure/config/storageKeys";
 import { resolveAppIconVariant, type AppIconVariant } from "../../../domain/appIconVariant";
-import type { TerminalBackgroundImageSettings } from "../../../domain/terminalBackgroundImage";
+import {
+  TERMINAL_BACKGROUND_IMAGE_ENABLED,
+  type TerminalBackgroundImageSettings,
+} from "../../../domain/terminalBackgroundImage";
 import { TerminalBackgroundSettings } from "../TerminalBackgroundSettings";
 import { resolveNoteFontSelectionFamily, resolveNoteFontSelectionId } from "../../../domain/noteFonts";
 import { DEFAULT_AUTO_IMPORT_SYSTEM_KNOWN_HOSTS } from "../../../domain/systemKnownHostsAutoImport";
@@ -410,10 +413,12 @@ function SettingsAppearanceTab(props: {
         )}
       </div>
 
-      <TerminalBackgroundSettings
-        settings={terminalBackgroundImage}
-        onChange={setTerminalBackgroundImage}
-      />
+      {TERMINAL_BACKGROUND_IMAGE_ENABLED && (
+        <TerminalBackgroundSettings
+          settings={terminalBackgroundImage}
+          onChange={setTerminalBackgroundImage}
+        />
+      )}
 
       <SectionHeader title={t("settings.appearance.appIcon")} />
       <SettingsAnchor anchorId="appearance-app-icon" className="rounded-lg border bg-card px-4 py-3 space-y-4">

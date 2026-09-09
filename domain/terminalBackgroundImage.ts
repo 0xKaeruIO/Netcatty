@@ -52,6 +52,23 @@ export const TERMINAL_BACKGROUND_BLUR_MAX = 24;
 export const TERMINAL_BACKGROUND_SCALE_MIN = 0.25;
 export const TERMINAL_BACKGROUND_SCALE_MAX = 4;
 
+/**
+ * Pack-time switch. Vite bakes `VITE_TERMINAL_BACKGROUND` from
+ * `NETCATTY_TERMINAL_BACKGROUND` (`0` / `false` / `off` disables).
+ * Node tests without that env keep the feature on.
+ */
+export const TERMINAL_BACKGROUND_IMAGE_ENABLED = (() => {
+  try {
+    const raw = (import.meta as { env?: Record<string, string | undefined> }).env
+      ?.VITE_TERMINAL_BACKGROUND;
+    if (raw == null || raw.trim() === '') return true;
+    const normalized = raw.trim().toLowerCase();
+    return normalized !== '0' && normalized !== 'false' && normalized !== 'off';
+  } catch {
+    return true;
+  }
+})();
+
 /** Upper bound accepted by the main-process importer. */
 export const TERMINAL_BACKGROUND_MAX_BYTES = 16 * 1024 * 1024;
 
@@ -158,7 +175,7 @@ export function normalizeTerminalBackgroundImage(
 export function isTerminalBackgroundImageConfigured(
   settings?: TerminalBackgroundImageSettings | null,
 ): boolean {
-  return !!settings?.enabled && !!settings.imageId;
+  return TERMINAL_BACKGROUND_IMAGE_ENABLED && !!settings?.enabled && !!settings.imageId;
 }
 
 /** `scale` only changes rendering for the two intrinsic-size fit modes. */

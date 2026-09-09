@@ -3,6 +3,8 @@
  * Each entry maps to a tab (and optional AI sub-tab) plus a DOM anchor id.
  */
 
+import { TERMINAL_BACKGROUND_IMAGE_ENABLED } from './terminalBackgroundImage';
+
 export const SETTINGS_TAB_IDS = [
   "application",
   "appearance",
@@ -49,7 +51,7 @@ export type SettingsSearchEntry = {
   keywords?: readonly string[];
 };
 
-export const SETTINGS_SEARCH_CATALOG: readonly SettingsSearchEntry[] = [
+const SETTINGS_SEARCH_CATALOG_ALL: readonly SettingsSearchEntry[] = [
   // Application
   {
     id: "application-check-updates",
@@ -954,6 +956,10 @@ export const SETTINGS_SEARCH_CATALOG: readonly SettingsSearchEntry[] = [
     keywords: ["extension", "plugin", "插件"],
   },
 ];
+
+export const SETTINGS_SEARCH_CATALOG: readonly SettingsSearchEntry[] = TERMINAL_BACKGROUND_IMAGE_ENABLED
+  ? SETTINGS_SEARCH_CATALOG_ALL
+  : SETTINGS_SEARCH_CATALOG_ALL.filter((entry) => entry.id !== "appearance-terminal-background");
 
 export function settingsAnchorDomId(anchorId: string): string {
   return `settings-anchor-${anchorId}`;

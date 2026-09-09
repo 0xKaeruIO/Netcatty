@@ -55,6 +55,10 @@ test("settings search catalog has unique ids", () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
+test("settings search catalog includes terminal background when the pack flag is on", () => {
+  assert.ok(SETTINGS_SEARCH_CATALOG.some((entry) => entry.id === "appearance-terminal-background"));
+});
+
 test("filterSettingsSearchCatalog matches English labels", () => {
   const hits = filterSettingsSearchCatalog("copy on select", tEn);
   assert.ok(hits.some((hit) => hit.entry.id === "terminal-copy-on-select"));

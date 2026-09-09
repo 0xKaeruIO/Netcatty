@@ -117,6 +117,8 @@ coverage
 !/build/installer.nsh
 /electron/native/**/build
 /electron/bridges/windowsHelloHelper/build/
+# Baked at Vite/pack time from NETCATTY_TERMINAL_BACKGROUND
+/electron/generated/featureFlags.cjs
 /release
 /out
 /public/monaco
