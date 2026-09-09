@@ -35,9 +35,14 @@ test('normalize keeps the image id when the wallpaper is toggled off', () => {
   assert.equal(isTerminalBackgroundImageConfigured(settings), false);
 });
 
+test('normalize allows fully transparent wallpaper opacity', () => {
+  const settings = normalizeTerminalBackgroundImage({ opacity: 0 });
+  assert.equal(settings.opacity, 0);
+});
+
 test('normalize clamps opacity, blur and scale into their supported ranges', () => {
   const low = normalizeTerminalBackgroundImage({ opacity: -1, blur: -5, scale: 0.01 });
-  assert.equal(low.opacity, 0.05);
+  assert.equal(low.opacity, 0);
   assert.equal(low.blur, 0);
   assert.equal(low.scale, 0.25);
 

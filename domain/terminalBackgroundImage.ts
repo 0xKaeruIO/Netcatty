@@ -46,7 +46,7 @@ export interface TerminalBackgroundImageSettings {
   scale: number;
 }
 
-export const TERMINAL_BACKGROUND_OPACITY_MIN = 0.05;
+export const TERMINAL_BACKGROUND_OPACITY_MIN = 0;
 export const TERMINAL_BACKGROUND_OPACITY_MAX = 1;
 export const TERMINAL_BACKGROUND_BLUR_MAX = 24;
 export const TERMINAL_BACKGROUND_SCALE_MIN = 0.25;

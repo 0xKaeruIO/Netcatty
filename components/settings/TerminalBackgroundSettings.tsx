@@ -135,7 +135,12 @@ function TerminalBackgroundSettingsInner({
 
   const previewStyle = useMemo(() => {
     if (!previewUrl) return undefined;
-    const { inset: _inset, ...style } = resolveTerminalBackgroundLayerStyle(settings, previewUrl);
+    // The thumbnail is only a crop/fit preview; blur exists to keep terminal
+    // text readable and should not wash out this picker.
+    const { inset: _inset, ...style } = resolveTerminalBackgroundLayerStyle(
+      { ...settings, blur: 0 },
+      previewUrl,
+    );
     return style;
   }, [previewUrl, settings]);
 
