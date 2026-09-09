@@ -2177,7 +2177,7 @@ export const InlineMarkdownEditor = React.memo(
       ) : mdxFallbackActive ? (
         <div
           data-note-markdown-source-fallback="true"
-          className="flex min-h-[calc(100vh-15rem)] min-w-0 flex-1 flex-col"
+          className="flex min-w-0 flex-1 flex-col"
         >
           <div
             data-note-markdown-source-notice="true"
@@ -2201,6 +2201,7 @@ export const InlineMarkdownEditor = React.memo(
             placeholder={placeholder}
             onChange={commitSourceMarkdown}
             readOnly={editorMode === "preview"}
+            fillParent={false}
             noteFontFamily={noteFontFamily}
             noteFontSize={noteCodeFontSize || noteFontSize}
           />

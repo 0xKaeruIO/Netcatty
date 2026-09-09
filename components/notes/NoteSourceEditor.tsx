@@ -72,10 +72,27 @@ export interface NoteSourceEditorProps {
   noteFontSize?: number;
   /** Blocks edits (used when the rich editor cannot render the markdown). */
   readOnly?: boolean;
+  /**
+   * Fill the parent pane (source mode). When false, grow with the markdown so
+   * an outer scroller — e.g. the rich-editor ScrollArea — can show the full
+   * note. Percentage `h-full` inside that scroller collapses to the native
+   * textarea size of two rows.
+   */
+  fillParent?: boolean;
 }
 
 export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSourceEditorProps>(
-  ({ noteId, value, placeholder = "", onChange, className = "", noteFontFamily, noteFontSize, readOnly = false }, ref) => {
+  ({
+    noteId,
+    value,
+    placeholder = "",
+    onChange,
+    className = "",
+    noteFontFamily,
+    noteFontSize,
+    readOnly = false,
+    fillParent = true,
+  }, ref) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const lineNumbersRef = useRef<HTMLDivElement>(null);
     const [localValue, setLocalValue] = useState(value);
@@ -320,7 +337,9 @@ export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSou
 
     return (
       <div
-        className={`relative flex h-full w-full bg-background font-mono text-sm select-text overflow-hidden ${className}`}
+        className={`relative flex w-full bg-background font-mono text-sm select-text ${
+          fillParent ? "h-full overflow-hidden" : "min-h-[24rem]"
+        } ${className}`}
       >
         {/* Line numbers gutter */}
         <div
@@ -337,9 +356,10 @@ export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSou
         </div>
 
         {/* Source Textarea */}
-        <div className="relative flex-1 h-full min-w-0">
+        <div className={`relative flex-1 min-w-0 ${fillParent ? "h-full" : ""}`}>
           <textarea
             ref={textareaRef}
+            rows={fillParent ? undefined : Math.max(lineCount, 16)}
             value={localValue}
             onChange={handleChange}
             onScroll={handleScroll}
@@ -372,7 +392,9 @@ export const NoteSourceEditor = React.forwardRef<NoteSourceEditorHandle, NoteSou
               fontFamily: noteFontFamily || undefined,
               fontSize: noteFontSize ? `${noteFontSize}px` : undefined,
             }}
-            className="w-full h-full py-3 px-4 bg-transparent text-foreground resize-none outline-none font-mono text-sm leading-6 whitespace-pre overflow-auto"
+            className={`w-full py-3 px-4 bg-transparent text-foreground resize-none outline-none font-mono text-sm leading-6 whitespace-pre ${
+              fillParent ? "h-full overflow-auto" : "h-auto overflow-hidden"
+            }`}
           />
         </div>
       </div>

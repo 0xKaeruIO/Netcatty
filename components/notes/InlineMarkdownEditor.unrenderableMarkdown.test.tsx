@@ -383,6 +383,11 @@ test("unrenderable markdown stays visible via the raw source fallback", async ()
     const fallback = querySourceFallback(rootNode);
     assert.ok(fallback, "expected the raw markdown fallback to be rendered");
     assert.equal(fallback.value, NOTE_MARKDOWN_MDX_CANNOT_PARSE);
+    const sourceLines = NOTE_MARKDOWN_MDX_CANNOT_PARSE.split("\n").length;
+    assert.ok(
+      fallback.rows >= sourceLines,
+      `fallback textarea must grow with the note (rows=${fallback.rows}, lines=${sourceLines})`,
+    );
 
     const notice = rootNode.querySelector("[data-note-markdown-source-notice]");
     assert.ok(notice, "expected an explanatory notice next to the fallback");
@@ -422,6 +427,7 @@ test("unrenderable markdown in preview mode falls back to a read-only source vie
     assert.ok(fallback, "expected the raw markdown fallback in preview mode");
     assert.equal(fallback.value, NOTE_MARKDOWN_MDX_CANNOT_PARSE);
     assert.equal(fallback.readOnly, true);
+    assert.ok(fallback.rows >= NOTE_MARKDOWN_MDX_CANNOT_PARSE.split("\n").length);
 
     // Read-only must also block the custom Tab insertion and history handling.
     await runWithAct(async () => {
