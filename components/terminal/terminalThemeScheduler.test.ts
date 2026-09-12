@@ -106,6 +106,37 @@ test('a wallpaper turns on xterm transparency and clears its background fill', (
   assert.equal(fakeTerm.options.theme.background, '#111111');
 });
 
+test('re-applying an unchanged theme does not touch xterm again', () => {
+  resetTerminalThemeSchedulerForTests();
+  let themeWrites = 0;
+  const fakeTerm = {
+    options: {
+      allowTransparency: false,
+      _theme: {} as Record<string, string>,
+      get theme() {
+        return this._theme;
+      },
+      set theme(value: Record<string, string>) {
+        themeWrites += 1;
+        this._theme = value;
+      },
+    },
+  };
+
+  applyTerminalThemeSync(fakeTerm as never, theme('wallpaper'), true);
+  assert.equal(themeWrites, 1);
+
+  // Focus / visibility churn re-runs the effect with the same theme. A second
+  // write would force another full-grid repaint and flash a transparent grid.
+  applyTerminalThemeSync(fakeTerm as never, theme('wallpaper'), true);
+  assert.equal(themeWrites, 1);
+
+  // A real change still gets through.
+  applyTerminalThemeSync(fakeTerm as never, theme('wallpaper'), false);
+  assert.equal(themeWrites, 2);
+  assert.equal(fakeTerm.options.theme.background, '#111111');
+});
+
 test('scheduled hidden-pane updates carry the transparency flag', async () => {
   resetTerminalThemeSchedulerForTests();
   const fakeTerm = {

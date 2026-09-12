@@ -518,13 +518,52 @@ export function shouldHideConnectingDialogForConnectionReuse({
     && !host.etEnabled;
 }
 
+type WebglFrameBuffer = {
+  clearColor?: (red: number, green: number, blue: number, alpha: number) => void;
+  clear?: (mask: number) => void;
+  COLOR_BUFFER_BIT?: number;
+};
+
 type XTermWithPrivateRenderService = XTerm & {
   _core?: {
     _renderService?: {
       _renderRows?: (start: number, end: number) => void;
+      _renderer?: { value?: { _gl?: WebglFrameBuffer | null } | null } | null;
     };
   };
 };
+
+/**
+ * The WebGL renderer never issues `gl.clear()`. It erases the previous frame by
+ * painting an opaque full-viewport background rectangle, and a terminal
+ * wallpaper makes that rectangle fully transparent. The erase pass then becomes
+ * a no-op, so two forced repaints inside one compositor frame alpha-blend the
+ * same glyphs onto themselves and the text reads brighter and bolder for that
+ * frame. Every forced repaint below redraws the whole grid from the renderer's
+ * persisted vertex data, so clearing first loses nothing and makes repeated
+ * forced repaints idempotent.
+ */
+function clearTransparentWebglFrame(term: XTerm): void {
+  // Never let a clear failure keep the repaint below from running.
+  try {
+    if (term.options?.allowTransparency !== true) return;
+
+    const gl = (term as XTermWithPrivateRenderService)._core?._renderService?._renderer?.value?._gl;
+    if (
+      !gl
+      || typeof gl.clear !== "function"
+      || typeof gl.clearColor !== "function"
+      || typeof gl.COLOR_BUFFER_BIT !== "number"
+    ) {
+      return;
+    }
+
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  } catch (err) {
+    logger.warn("Transparent WebGL frame clear failed", err);
+  }
+}
 
 export function forceSyncRenderAfterResize(term: XTerm): void {
   const renderService = (term as XTermWithPrivateRenderService)._core?._renderService;
@@ -535,6 +574,7 @@ export function forceSyncRenderAfterResize(term: XTerm): void {
   if (endRow < 0) return;
 
   try {
+    clearTransparentWebglFrame(term);
     renderRows.call(renderService, 0, endRow);
   } catch (err) {
     logger.warn("Sync render after resize failed", err);

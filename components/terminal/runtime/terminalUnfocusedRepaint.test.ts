@@ -142,6 +142,61 @@ test("forceTerminalRepaintBypassingAnimationFrame refreshes alternate-screen vie
   assert.equal(renderRowsCalled, true);
 });
 
+const createTransparentGridTerm = (allowTransparency: boolean) => {
+  const calls: string[] = [];
+  const gl = {
+    COLOR_BUFFER_BIT: 0x4000,
+    clearColor: (...rgba: number[]) => {
+      calls.push(`clearColor:${rgba.join(",")}`);
+    },
+    clear: (mask: number) => {
+      calls.push(`clear:${mask}`);
+    },
+  };
+  const term = {
+    rows: 24,
+    options: { allowTransparency },
+    buffer: { active: { type: "normal" } },
+    _core: {
+      _renderService: {
+        _renderer: { value: { _gl: gl } },
+        _renderRows: () => {
+          calls.push("renderRows");
+        },
+      },
+    },
+  };
+  return { term, calls };
+};
+
+test("forced repaints clear the WebGL frame first on a transparent grid", () => {
+  // The WebGL renderer erases the previous frame with an opaque background
+  // rect, which a wallpaper makes fully transparent. Without an explicit clear,
+  // two forced repaints in one compositor frame blend the glyphs onto
+  // themselves and the text flashes brighter and bolder.
+  const { term, calls } = createTransparentGridTerm(true);
+
+  forceTerminalRepaintBypassingAnimationFrame(term as never);
+  forceTerminalRepaintBypassingAnimationFrame(term as never);
+
+  assert.deepEqual(calls, [
+    "clearColor:0,0,0,0",
+    "clear:16384",
+    "renderRows",
+    "clearColor:0,0,0,0",
+    "clear:16384",
+    "renderRows",
+  ]);
+});
+
+test("forced repaints leave the opaque grid render path untouched", () => {
+  const { term, calls } = createTransparentGridTerm(false);
+
+  forceTerminalRepaintBypassingAnimationFrame(term as never);
+
+  assert.deepEqual(calls, ["renderRows"]);
+});
+
 test("repaintTerminalAfterReveal repaints again after the reveal reaches a browser frame", () => {
   const scheduledFrames: Array<() => void> = [];
   let compositorReady = false;

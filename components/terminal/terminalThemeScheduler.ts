@@ -30,17 +30,27 @@ export function buildXtermTheme(theme: TerminalTheme, transparentBackground = fa
   };
 }
 
+const appliedThemes = new WeakMap<Terminal, string>();
+
 function applyThemeToTerminal(
   term: Terminal,
   theme: TerminalTheme,
   transparentBackground: boolean,
 ): void {
+  const xtermTheme = buildXtermTheme(theme, transparentBackground);
+  const applied = `${transparentBackground}|${JSON.stringify(xtermTheme)}`;
+  // Focus and visibility changes re-run the theme effect with an unchanged
+  // theme. Re-assigning it would force another full-grid repaint, which a
+  // transparent grid cannot absorb without the glyphs flashing brighter.
+  if (appliedThemes.get(term) === applied) return;
+  appliedThemes.set(term, applied);
+
   // Flipping allowTransparency rebuilds the renderer, so only touch it on a
   // real change (wallpaper turned on or off).
   if (term.options.allowTransparency !== transparentBackground) {
     term.options.allowTransparency = transparentBackground;
   }
-  term.options.theme = buildXtermTheme(theme, transparentBackground);
+  term.options.theme = xtermTheme;
   forceSyncRenderAfterResize(term);
 }
 

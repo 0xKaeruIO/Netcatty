@@ -759,7 +759,7 @@ test("terminal theme updates force xterm renderer to repaint immediately", () =>
   const source = readFileSync(new URL("./useTerminalEffects.ts", import.meta.url), "utf8");
   const schedulerSource = readFileSync(new URL("./terminalThemeScheduler.ts", import.meta.url), "utf8");
 
-  assert.match(source, /applyTerminalThemeSync\(term, effectiveTheme\)/);
-  assert.match(schedulerSource, /term\.options\.theme = \{/);
+  assert.match(source, /applyTerminalThemeSync\(term, effectiveTheme, hasBackgroundImage\)/);
+  assert.match(schedulerSource, /term\.options\.theme = xtermTheme/);
   assert.match(schedulerSource, /forceSyncRenderAfterResize\(term\)/);
 });
