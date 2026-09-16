@@ -141,6 +141,7 @@ export async function uploadLocalFoldersProgressively(
   const results: UploadResult[] = [];
   const createdDirs = new Set<string>();
   const failedDirs = new Map<string, string>();
+  const inflightDirs = new Map<string, Promise<void>>();
   const parentIds = new Map<string, string>();
   const parentStats = new Map<string, {
     discovered: number;
@@ -315,23 +316,38 @@ export async function uploadLocalFoldersProgressively(
     if (failedDirs.has(dirPath)) {
       throw new Error(failedDirs.get(dirPath) || "Directory creation failed");
     }
-    try {
-      if (isLocal) {
-        await bridge.mkdirLocal?.(dirPath);
-      } else if (sftpId) {
-        await bridge.mkdirSftp(sftpId, dirPath);
+    const inflight = inflightDirs.get(dirPath);
+    if (inflight) {
+      await inflight;
+      if (createdDirs.has(dirPath)) return;
+      if (failedDirs.has(dirPath)) {
+        throw new Error(failedDirs.get(dirPath) || "Directory creation failed");
       }
-      createdDirs.add(dirPath);
-    } catch (error) {
-      const message = formatUploadError(error);
-      // Concurrent workers / merge into existing remote dirs race here.
-      if (/exist|EEXIST|file exists|already/i.test(message)) {
-        createdDirs.add(dirPath);
-        return;
-      }
-      failedDirs.set(dirPath, message);
-      throw error;
+      return;
     }
+    const pending = (async () => {
+      try {
+        if (isLocal) {
+          await bridge.mkdirLocal?.(dirPath);
+        } else if (sftpId) {
+          await bridge.mkdirSftp(sftpId, dirPath);
+        }
+        createdDirs.add(dirPath);
+      } catch (error) {
+        const message = formatUploadError(error);
+        // Concurrent workers / merge into existing remote dirs race here.
+        if (/exist|EEXIST|file exists|already/i.test(message)) {
+          createdDirs.add(dirPath);
+          return;
+        }
+        failedDirs.set(dirPath, message);
+        throw error;
+      } finally {
+        inflightDirs.delete(dirPath);
+      }
+    })();
+    inflightDirs.set(dirPath, pending);
+    await pending;
   };
 
   const remapRelativePath = (sourceRootName: string, relativePath: string): string => {

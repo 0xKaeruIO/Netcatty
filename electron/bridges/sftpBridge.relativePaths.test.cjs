@@ -130,3 +130,119 @@ test("session-backed recursive delete preserves a hidden directory name", async 
   assert.deepEqual(calls.realpath, []);
   assert.deepEqual(calls.rmdir, [".cache"]);
 });
+
+test("concurrent mkdir recovers when a sibling already created the parent", async () => {
+  const existing = new Set(["/remote"]);
+  const calls = { mkdir: [] };
+  const channel = {
+    readdir(_targetPath, callback) {
+      callback(null, []);
+    },
+    unlink(_targetPath, callback) {
+      callback(null);
+    },
+    stat(targetPath, callback) {
+      if (existing.has(targetPath) || targetPath === "/") {
+        callback(null, { isDirectory: () => true });
+        return;
+      }
+      const error = new Error(`No such file: ${targetPath}`);
+      error.code = 2;
+      callback(error);
+    },
+    mkdir(targetPath, callback) {
+      calls.mkdir.push(targetPath);
+      if (existing.has(targetPath)) {
+        const error = new Error(`Failure: ${targetPath}`);
+        error.code = 11;
+        callback(error);
+        return;
+      }
+      existing.add(targetPath);
+      callback(null);
+    },
+    realpath(targetPath, callback) {
+      callback(null, targetPath);
+    },
+  };
+  const client = {
+    sftp: channel,
+    realPath: (targetPath) => Promise.resolve(targetPath),
+  };
+  sftpBridge.init({
+    electronModule: {},
+    sessions: new Map(),
+    sftpClients: new Map([["mkdir-race", client]]),
+  });
+
+  await Promise.all([
+    sftpBridge.mkdirSftp(null, { sftpId: "mkdir-race", path: "/remote/docs/a", encoding: "utf-8" }),
+    sftpBridge.mkdirSftp(null, { sftpId: "mkdir-race", path: "/remote/docs/b", encoding: "utf-8" }),
+  ]);
+
+  assert.ok(existing.has("/remote/docs"));
+  assert.ok(existing.has("/remote/docs/a"));
+  assert.ok(existing.has("/remote/docs/b"));
+  assert.ok(calls.mkdir.includes("/remote/docs"));
+});
+
+test("mkdir treats an already-created directory as success and continues nested segments", async () => {
+  const existing = new Set(["/remote", "/remote/docs"]);
+  const forcedStatMiss = new Set();
+  const mkdirFailures = [];
+  const channel = {
+    readdir(_targetPath, callback) {
+      callback(null, []);
+    },
+    unlink(_targetPath, callback) {
+      callback(null);
+    },
+    stat(targetPath, callback) {
+      if (targetPath === "/remote/docs" && !forcedStatMiss.has(targetPath)) {
+        forcedStatMiss.add(targetPath);
+        const error = new Error(`No such file: ${targetPath}`);
+        error.code = 2;
+        callback(error);
+        return;
+      }
+      if (existing.has(targetPath) || targetPath === "/") {
+        callback(null, { isDirectory: () => true });
+        return;
+      }
+      const error = new Error(`No such file: ${targetPath}`);
+      error.code = 2;
+      callback(error);
+    },
+    mkdir(targetPath, callback) {
+      if (existing.has(targetPath)) {
+        const error = new Error(`Failure: ${targetPath}`);
+        error.code = 11;
+        mkdirFailures.push(targetPath);
+        callback(error);
+        return;
+      }
+      existing.add(targetPath);
+      callback(null);
+    },
+    realpath(targetPath, callback) {
+      callback(null, targetPath);
+    },
+  };
+  sftpBridge.init({
+    electronModule: {},
+    sessions: new Map(),
+    sftpClients: new Map([["mkdir-exists", {
+      sftp: channel,
+      realPath: (targetPath) => Promise.resolve(targetPath),
+    }]]),
+  });
+
+  await sftpBridge.mkdirSftp(null, {
+    sftpId: "mkdir-exists",
+    path: "/remote/docs/nested",
+    encoding: "utf-8",
+  });
+
+  assert.deepEqual(mkdirFailures, ["/remote/docs"]);
+  assert.ok(existing.has("/remote/docs/nested"));
+});

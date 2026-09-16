@@ -442,13 +442,30 @@ const ensureRemoteDirInternal = async (sftp, dirPath, encoding, options = {}) =>
       }
     } catch (err) {
       throwIfAborted(signal);
-      if (err && (err.code === 2 || err.code === 4)) {
-        throwIfAborted(signal);
-        await mkdirAsync(sftp, encodedCurrent);
-        throwIfAborted(signal);
-        continue;
+      if (err && err.message && String(err.message).startsWith("Remote path is not a directory:")) {
+        throw err;
       }
-      throw err;
+      if (!(err && (err.code === 2 || err.code === 4))) {
+        throw err;
+      }
+      throwIfAborted(signal);
+      try {
+        await mkdirAsync(sftp, encodedCurrent);
+      } catch (mkdirErr) {
+        throwIfAborted(signal);
+        // Concurrent uploads race on the same parent: the loser must not abort
+        // the remaining path walk, or later OPEN hits a missing nested dir.
+        let stats;
+        try {
+          stats = await raceReadAgainstAbort(statAsync(sftp, encodedCurrent), signal);
+        } catch {
+          throw mkdirErr;
+        }
+        if (!stats || typeof stats.isDirectory !== "function" || !stats.isDirectory()) {
+          throw mkdirErr;
+        }
+      }
+      throwIfAborted(signal);
     }
   }
 };

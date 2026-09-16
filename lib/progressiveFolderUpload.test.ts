@@ -813,3 +813,64 @@ test("progressive multi-root resume of non-head parent unblocks while head stays
   const results = await uploadPromise;
   assert.equal(results.filter((row) => row.success).length, 2);
 });
+
+test("progressive folder upload coalesces concurrent mkdir of the same parent", async () => {
+  let mkdirInFlight = 0;
+  let overlappingMkdir = 0;
+  const mkdirCounts = new Map<string, number>();
+  const listLocalTree = async (
+    _path: string,
+    options: { onEntries?: (entries: LocalTreeListEntry[]) => void },
+  ) => {
+    options.onEntries?.([
+      {
+        localPath: "/tmp/docs/a.txt",
+        relativePath: "docs/a.txt",
+        type: "file",
+        size: 1,
+        lastModified: 1,
+      },
+      {
+        localPath: "/tmp/docs/b.txt",
+        relativePath: "docs/b.txt",
+        type: "file",
+        size: 1,
+        lastModified: 1,
+      },
+      {
+        localPath: "/tmp/docs/c.txt",
+        relativePath: "docs/c.txt",
+        type: "file",
+        size: 1,
+        lastModified: 1,
+      },
+    ]);
+    return [];
+  };
+
+  const results = await uploadLocalFoldersProgressively(
+    [{ name: "docs", localPath: "/tmp/docs" }],
+    {
+      targetPath: "/remote",
+      sftpId: "sftp-1",
+      isLocal: false,
+      fileTransferConcurrency: 3,
+      joinPath: (base, name) => `${base}/${name}`,
+      bridge: {
+        mkdirSftp: async (_id, dirPath) => {
+          mkdirCounts.set(dirPath, (mkdirCounts.get(dirPath) ?? 0) + 1);
+          mkdirInFlight += 1;
+          if (mkdirInFlight > 1) overlappingMkdir += 1;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          mkdirInFlight -= 1;
+        },
+        startStreamTransfer: async (payload) => ({ transferId: payload.transferId }),
+      },
+      listLocalTree,
+    },
+  );
+
+  assert.equal(results.filter((row) => row.success).length, 3);
+  assert.equal(mkdirCounts.get("/remote/docs"), 1);
+  assert.equal(overlappingMkdir, 0);
+});

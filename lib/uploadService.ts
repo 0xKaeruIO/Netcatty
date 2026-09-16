@@ -441,6 +441,7 @@ async function uploadEntries(
   const results: UploadResult[] = [];
   const createdDirs = new Set<string>();
   const failedDirs = new Map<string, string>();
+  const inflightDirs = new Map<string, Promise<string | null>>();
   const reportedDirectoryFailures = new Set<string>();
   let wasCancelled = false;
 
@@ -507,22 +508,34 @@ async function uploadEntries(
     if (createdDirs.has(dirPath)) return null;
     const previousFailure = failedDirs.get(dirPath);
     if (previousFailure) return previousFailure;
+    const inflight = inflightDirs.get(dirPath);
+    if (inflight) return inflight;
 
-    try {
-      if (isLocal) {
-        if (bridge.mkdirLocal) {
-          await bridge.mkdirLocal(dirPath);
+    const pending = (async (): Promise<string | null> => {
+      try {
+        if (isLocal) {
+          if (bridge.mkdirLocal) {
+            await bridge.mkdirLocal(dirPath);
+          }
+        } else if (sftpId) {
+          await bridge.mkdirSftp(sftpId, dirPath);
         }
-      } else if (sftpId) {
-        await bridge.mkdirSftp(sftpId, dirPath);
+        createdDirs.add(dirPath);
+        return null;
+      } catch (error) {
+        const errorMessage = formatUploadError(error);
+        if (/exist|EEXIST|file exists|already/i.test(errorMessage)) {
+          createdDirs.add(dirPath);
+          return null;
+        }
+        failedDirs.set(dirPath, errorMessage);
+        return errorMessage;
+      } finally {
+        inflightDirs.delete(dirPath);
       }
-      createdDirs.add(dirPath);
-      return null;
-    } catch (error) {
-      const errorMessage = formatUploadError(error);
-      failedDirs.set(dirPath, errorMessage);
-      return errorMessage;
-    }
+    })();
+    inflightDirs.set(dirPath, pending);
+    return pending;
   };
 
   // Group entries by root folder

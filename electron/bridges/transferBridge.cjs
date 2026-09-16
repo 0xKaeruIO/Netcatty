@@ -5915,6 +5915,7 @@ async function startTransferNow(event, payload, onProgress) {
         ));
       } catch (error) {
         if (transfer.cancelled || transfer.signal?.aborted) throw new Error("Transfer cancelled");
+        throw error;
       }
 
       const resolvedTargetEncoding = resolveEncodingForRequest(targetSftpId, targetEncoding);
@@ -6221,6 +6222,7 @@ async function startTransferNow(event, payload, onProgress) {
               ));
             } catch (error) {
               if (transfer.cancelled || transfer.signal?.aborted) throw new Error("Transfer cancelled");
+              throw error;
             }
 
             const escapedSource = sourcePath.replace(/'/g, "'\\''");
@@ -6359,6 +6361,7 @@ async function startTransferNow(event, payload, onProgress) {
           ));
         } catch (error) {
           if (transfer.cancelled || transfer.signal?.aborted) throw new Error("Transfer cancelled");
+          throw error;
         }
 
         transfer.resumeStage = 'upload';
@@ -7207,6 +7210,7 @@ async function sameHostCopyDirectory(event, payload) {
       );
     } catch (error) {
       if (transfer.cancelled) throw new Error("Transfer cancelled");
+      throw error;
     }
 
     // Use "source/." to copy directory *contents* into target, preserving merge
