@@ -476,6 +476,107 @@ test("only trusted live terminal cwd recovery resumes follow after initial probe
   await act(async () => renderer?.unmount());
 });
 
+test("the command-submit cwd invalidation does not fight the real cwd publication", async () => {
+  // Submitting a command publishes activeTerminalCwd=null before the shell has
+  // moved. Following that synthetic value raced the real publication ~150ms
+  // later: the two syncs bumped each other's generation, so the slow listing was
+  // rolled back while the winner latched the optimistic path as already reached.
+  const navigatedPaths: string[] = [];
+  let releaseListing: (() => void) | null = null;
+  const connection = {
+    id: "conn-1",
+    hostId: "host-1",
+    currentPath: "/home/alice",
+    status: "connected",
+    isLocal: false,
+  };
+  const sftpRef = {
+    current: {
+      leftPane: { connection, loading: false },
+      navigateTo: async (_side: "left", path: string, options?: { shouldApply?: () => boolean }) => {
+        const previousPath = connection.currentPath;
+        // navigateTo shows the target optimistically and only confirms it once
+        // the remote listing resolves.
+        connection.currentPath = path;
+        sftpRef.current.leftPane.loading = true;
+        await new Promise<void>((resolve) => { releaseListing = resolve; });
+        sftpRef.current.leftPane.loading = false;
+        if (options?.shouldApply && !options.shouldApply()) {
+          connection.currentPath = previousPath;
+          return "aborted" as const;
+        }
+        navigatedPaths.push(path);
+        return "reached" as const;
+      },
+    },
+  };
+  let activeTerminalCwd: string | null = "/home/alice";
+  let activeTerminalCwdTrusted = true;
+  let probeCalls = 0;
+  let renderer: ReactTestRenderer | null = null;
+
+  function Probe() {
+    useSftpFollowTerminalCwd({
+      activeSessionId: "session-1",
+      activeTerminalCwd,
+      activeTerminalCwdTrusted,
+      canFollowTerminalCwd: true,
+      connectionId: connection.id,
+      connectionIsLocal: connection.isLocal,
+      connectionLoading: false,
+      connectionPath: connection.currentPath,
+      connectionStatus: connection.status,
+      effectiveFollowTerminalCwd: true,
+      followTerminalCwdHost: host,
+      hasActiveWork: false,
+      isVisible: true,
+      ownerPanelOpen: true,
+      onGetTerminalCwd: async () => {
+        probeCalls += 1;
+        return activeTerminalCwd ?? "/home/alice";
+      },
+      onPendingFollowOverride: () => {},
+      sftpRef,
+    });
+    return null;
+  }
+
+  await act(async () => {
+    renderer = create(React.createElement(Probe));
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+  releaseListing?.();
+  await act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
+  const probeCallsAfterFirstOpen = probeCalls;
+
+  // `cd /srv/new` is submitted: the cwd is invalidated first.
+  activeTerminalCwd = null;
+  activeTerminalCwdTrusted = false;
+  await act(async () => {
+    renderer?.update(React.createElement(Probe));
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+  assert.equal(
+    probeCalls,
+    probeCallsAfterFirstOpen,
+    "the synthetic null cwd must not start a probe that races the command",
+  );
+
+  // The post-command backend probe publishes the real cwd.
+  activeTerminalCwd = "/srv/new";
+  activeTerminalCwdTrusted = true;
+  await act(async () => {
+    renderer?.update(React.createElement(Probe));
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+  releaseListing?.();
+  await act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
+
+  assert.deepEqual(navigatedPaths, ["/srv/new"]);
+  assert.equal(connection.currentPath, "/srv/new");
+  await act(async () => renderer?.unmount());
+});
+
 test("an in-flight follow probe cannot navigate after the focused session changes", async () => {
   const navigatedPaths: string[] = [];
   const connection = {
@@ -534,8 +635,9 @@ test("an in-flight follow probe cannot navigate after the focused session change
   });
   assert.deepEqual(navigatedPaths, ["/root/session-a"]);
 
+  // An untrusted live cwd still resolves the target through a fresh probe.
   deferProbe = true;
-  activeTerminalCwd = null;
+  activeTerminalCwd = "/var/log";
   await act(async () => {
     renderer?.update(React.createElement(Probe));
     await new Promise((resolve) => setImmediate(resolve));
@@ -545,7 +647,7 @@ test("an in-flight follow probe cannot navigate after the focused session change
   activeSessionId = "session-b";
   await act(async () => renderer?.update(React.createElement(Probe)));
   await act(async () => {
-    resolveCwd?.("/root/from-session-a");
+    resolveCwd?.("/var/log");
     await new Promise((resolve) => setImmediate(resolve));
   });
 

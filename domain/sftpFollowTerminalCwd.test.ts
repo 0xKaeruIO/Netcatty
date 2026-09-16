@@ -9,9 +9,12 @@ import {
   shouldClearBlockedFollowOnReach,
   shouldFollowTerminalCwdNavigate,
   shouldInvalidateFollowBookkeepingOnCwdChange,
+  shouldLatchFollowTerminalCwdAsReached,
   shouldLatchInitialFollowInterruption,
   shouldReleaseInitialFollowSyncAttempt,
   shouldResetInitialFollowTerminalCwdSync,
+  shouldStartFollowTerminalCwdSync,
+  withLatestFollowTerminalCwdSetting,
 } from "./sftpFollowTerminalCwd";
 
 const base = {
@@ -102,6 +105,47 @@ test("shouldFollowTerminalCwdNavigate resumes when the terminal cwd changes", ()
   );
 });
 
+test("shouldStartFollowTerminalCwdSync waits for a concrete cwd after command submission", () => {
+  assert.equal(shouldStartFollowTerminalCwdSync({ liveTerminalCwd: "/srv/app" }), true);
+  assert.equal(shouldStartFollowTerminalCwdSync({ liveTerminalCwd: null }), false);
+  assert.equal(shouldStartFollowTerminalCwdSync({ liveTerminalCwd: undefined }), false);
+});
+
+test("shouldLatchFollowTerminalCwdAsReached ignores a pane path that is still loading", () => {
+  const connection = {
+    id: "conn-1",
+    currentPath: "/srv/app",
+    status: "connected",
+    isLocal: false,
+  };
+
+  assert.equal(
+    shouldLatchFollowTerminalCwdAsReached({ connection, terminalCwd: "/srv/app", loading: false }),
+    true,
+  );
+  // navigateTo already applied /srv/app optimistically; it may still roll back.
+  assert.equal(
+    shouldLatchFollowTerminalCwdAsReached({ connection, terminalCwd: "/srv/app", loading: true }),
+    false,
+  );
+  assert.equal(
+    shouldLatchFollowTerminalCwdAsReached({ connection, terminalCwd: "/other", loading: false }),
+    false,
+  );
+  assert.equal(
+    shouldLatchFollowTerminalCwdAsReached({
+      connection: { ...connection, status: "disconnected" },
+      terminalCwd: "/srv/app",
+      loading: false,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldLatchFollowTerminalCwdAsReached({ connection: null, terminalCwd: "/srv/app", loading: false }),
+    false,
+  );
+});
+
 test("resolveHostFollowTerminalCwd inherits the global setting until the host overrides it", () => {
   assert.equal(resolveHostFollowTerminalCwd(undefined, true), true);
   assert.equal(resolveHostFollowTerminalCwd(undefined, false), false);
@@ -129,6 +173,32 @@ test("visible SFTP host override can enable follow when terminal host inherits g
   const followHost = resolveSftpFollowTerminalCwdTargetHost(visibleHost, terminalHost);
 
   assert.equal(resolveHostFollowTerminalCwd(followHost?.sftpFollowTerminalCwd, false), true);
+});
+
+test("withLatestFollowTerminalCwdSetting refreshes an open-time snapshot from the vault host", () => {
+  const snapshot = { id: "host-1", port: 2222, sftpFollowTerminalCwd: undefined };
+
+  assert.equal(
+    withLatestFollowTerminalCwdSetting(snapshot, { sftpFollowTerminalCwd: true })
+      .sftpFollowTerminalCwd,
+    true,
+  );
+  assert.equal(
+    withLatestFollowTerminalCwdSetting(snapshot, { sftpFollowTerminalCwd: false })
+      .sftpFollowTerminalCwd,
+    false,
+  );
+  // Session-time overrides on the snapshot survive the refresh.
+  assert.equal(
+    withLatestFollowTerminalCwdSetting(snapshot, { sftpFollowTerminalCwd: true }).port,
+    2222,
+  );
+  // Nothing to refresh keeps the snapshot identity.
+  assert.equal(withLatestFollowTerminalCwdSetting(snapshot, null), snapshot);
+  assert.equal(
+    withLatestFollowTerminalCwdSetting(snapshot, { sftpFollowTerminalCwd: undefined }),
+    snapshot,
+  );
 });
 
 test("mergeLatestFollowTerminalCwdHostSetting refreshes the follow flag without losing display overrides", () => {

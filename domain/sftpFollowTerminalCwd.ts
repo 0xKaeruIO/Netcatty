@@ -167,6 +167,27 @@ export const mergeLatestFollowTerminalCwdHostSetting = <
   };
 };
 
+/**
+ * Refresh the follow flag on an open-time host snapshot.
+ *
+ * The SFTP toolbar toggle persists `sftpFollowTerminalCwd` on the vault host,
+ * but snapshots captured when the panel opened (the per-tab SFTP host) keep the
+ * value they were created with. Anything that decides whether follow work is
+ * needed — notably the post-command backend cwd probe — must read the flag from
+ * the latest vault entry, otherwise enabling follow after the panel is already
+ * open never starts feeding cwd updates.
+ */
+export const withLatestFollowTerminalCwdSetting = <
+  T extends { sftpFollowTerminalCwd?: boolean },
+>(
+  snapshotHost: T,
+  latestHost: { sftpFollowTerminalCwd?: boolean } | null | undefined,
+): T => {
+  if (!latestHost) return snapshotHost;
+  if (latestHost.sftpFollowTerminalCwd === snapshotHost.sftpFollowTerminalCwd) return snapshotHost;
+  return { ...snapshotHost, sftpFollowTerminalCwd: latestHost.sftpFollowTerminalCwd };
+};
+
 /** Clear a follow block once the user reaches the blocked cwd through any navigation. */
 export const shouldClearBlockedFollowOnReach = (
   blockedFollow: SftpFollowTerminalCwdBlock | null | undefined,
@@ -232,6 +253,56 @@ export const shouldApplyFollowTerminalCwdSyncResult = ({
     if (liveTerminalCwd && liveTerminalCwd !== expectedTerminalCwd) return false;
   }
   return true;
+};
+
+/**
+ * Whether the regular follow sync may start for the current live cwd input.
+ *
+ * `null` is published as a synthetic invalidation the instant a command is
+ * submitted (`invalidateTerminalCwdAfterCommand`). The shell has not moved yet,
+ * so a sync started here has nothing to follow and falls back to its own fresh
+ * backend probe, which races the command being executed. Meanwhile the real cwd
+ * lands a moment later and starts a second sync: the two bump each other's
+ * generation, the loser's `navigateTo` rolls the pane back to the old directory,
+ * and the winner meanwhile saw the loser's optimistic `currentPath` and latched
+ * the target as already reached — leaving the pane on the old directory with no
+ * retry armed.
+ *
+ * Waiting for a concrete cwd costs nothing: the bookkeeping was already
+ * invalidated by the same transition, so the real value is followed as soon as
+ * OSC 7 or the post-command backend probe publishes it.
+ */
+export const shouldStartFollowTerminalCwdSync = ({
+  liveTerminalCwd,
+}: {
+  liveTerminalCwd: string | null | undefined;
+}): boolean => Boolean(liveTerminalCwd);
+
+/**
+ * Whether a follow target that already matches the pane path may be latched as
+ * handled.
+ *
+ * `navigateTo` sets `currentPath` optimistically and only confirms it once the
+ * listing resolves, so a loading pane may be displaying a path it has not
+ * reached (and may still roll back from). Latching that as handled would
+ * permanently disarm follow for this cwd. Wait for the pane to settle instead.
+ */
+export const shouldLatchFollowTerminalCwdAsReached = ({
+  connection,
+  terminalCwd,
+  loading,
+}: {
+  connection: {
+    id?: string | null;
+    currentPath?: string | null;
+    status?: string;
+    isLocal?: boolean;
+  } | null | undefined;
+  terminalCwd: string;
+  loading: boolean;
+}): boolean => {
+  if (loading || !connection?.id || connection.isLocal) return false;
+  return connection.status === "connected" && connection.currentPath === terminalCwd;
 };
 
 /** Whether SFTP should auto-navigate to match the linked terminal cwd. */

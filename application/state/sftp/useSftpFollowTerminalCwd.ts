@@ -12,9 +12,11 @@ import {
   shouldClearBlockedFollowOnReach,
   shouldFollowTerminalCwdNavigate,
   shouldInvalidateFollowBookkeepingOnCwdChange,
+  shouldLatchFollowTerminalCwdAsReached,
   shouldLatchInitialFollowInterruption,
   shouldReleaseInitialFollowSyncAttempt,
   shouldResetInitialFollowTerminalCwdSync,
+  shouldStartFollowTerminalCwdSync,
   type SftpFollowTerminalCwdBlock,
 } from "../../../domain/sftpFollowTerminalCwd";
 import type { Host } from "../../../types";
@@ -268,6 +270,7 @@ export function useSftpFollowTerminalCwd({
 
   const syncFollowToTerminalCwd = useCallback(async () => {
     if (!onGetTerminalCwd || !effectiveFollowTerminalCwd || !canFollowTerminalCwd) return;
+    if (!shouldStartFollowTerminalCwdSync({ liveTerminalCwd: activeTerminalCwd })) return;
 
     const liveConnectionId = sftpRef.current.leftPane.connection?.id ?? null;
     if (!liveConnectionId || initialFollowReadyConnectionRef.current !== liveConnectionId) return;
@@ -309,12 +312,11 @@ export function useSftpFollowTerminalCwd({
       blockedFollow: blockedFollowRef.current,
       handledFollow: handledFollowRef.current,
     })) {
-      if (
-        connection?.id
-        && !connection.isLocal
-        && connection.status === "connected"
-        && connection.currentPath === terminalCwd
-      ) {
+      if (connection?.id && shouldLatchFollowTerminalCwdAsReached({
+        connection,
+        terminalCwd,
+        loading: sftpRef.current.leftPane.loading,
+      })) {
         handledFollowRef.current = { connectionId: connection.id, terminalCwd };
       }
       return;

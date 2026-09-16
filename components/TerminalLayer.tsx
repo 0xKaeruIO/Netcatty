@@ -108,6 +108,7 @@ import {
   resolveTerminalSidePanelAutoOpen,
 } from '../domain/terminalSidePanelAutoOpen';
 import { shouldProbeCommandCwd } from './terminalLayer/commandCwdProbe';
+import { withLatestFollowTerminalCwdSetting } from '../domain/sftpFollowTerminalCwd';
 import {
   resolvePreferredTerminalCwd,
   scheduleBackendCwdProbeAfterCommand,
@@ -1122,8 +1123,16 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     const session = sessionsRef.current.find((candidate) => candidate.id === sessionId);
     if (!session || !canReuseTerminalConnection(session)) return;
     const sessionHost = sessionHostsMapRef.current.get(sessionId);
-    const visibleSftpHost = tabId && sidePanelLayoutHasTool(sidePanelLayoutsRef.current.get(tabId), 'sftp')
+    const storedSftpHost = tabId && sidePanelLayoutHasTool(sidePanelLayoutsRef.current.get(tabId), 'sftp')
       ? sftpHostForTabRef.current.get(tabId) ?? null
+      : null;
+    // sftpHostForTab is a snapshot from panel-open time; the follow toggle
+    // persists onto the vault host, so read that flag from the latest entry.
+    const visibleSftpHost = storedSftpHost
+      ? withLatestFollowTerminalCwdSetting(
+        storedSftpHost,
+        storedSftpHost.id ? hostMapRef.current.get(storedSftpHost.id) : null,
+      )
       : null;
     if (!shouldProbeCommandCwd({
       restoreTerminalCwd,

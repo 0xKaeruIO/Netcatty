@@ -1,7 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { shouldProbeCommandCwd } from "./commandCwdProbe";
+
+const terminalLayerSource = readFileSync(
+  new URL("../TerminalLayer.tsx", import.meta.url),
+  "utf8",
+);
+
+test("post-command cwd probing reads the follow flag from the latest vault host", () => {
+  // The per-tab SFTP host is a snapshot from panel-open time, so toggling
+  // "follow terminal cwd" after the panel opened would otherwise never start
+  // publishing cwd updates and follow would look dead.
+  assert.match(
+    terminalLayerSource,
+    /const visibleSftpHost = storedSftpHost\s*\?\s*withLatestFollowTerminalCwdSetting\(/,
+  );
+});
 
 test("probes command cwd for session restore even when the SFTP panel is not visible", () => {
   assert.equal(
