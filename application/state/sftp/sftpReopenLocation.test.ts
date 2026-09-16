@@ -6,6 +6,7 @@ import {
   getSftpReopenMemoryKey,
   resolveSftpAutoConnectPath,
   resolveSftpOpenLocation,
+  shouldIgnoreSftpSharedHostCacheOnAutoConnect,
 } from "./sftpReopenLocation.ts";
 
 test("first open of a terminal lands on the terminal cwd", () => {
@@ -148,5 +149,61 @@ test("auto-connect ignores empty remembered paths", () => {
       rememberedPath: "",
     }),
     undefined,
+  );
+});
+
+test("follow mode auto-connect lands on the terminal cwd, not another pane's path", () => {
+  assert.equal(
+    resolveSftpAutoConnectPath({
+      rememberedPath: "/home/deploy/projects/app",
+      followTerminalCwd: true,
+      terminalCwd: "/var/log",
+    }),
+    "/var/log",
+  );
+});
+
+test("follow mode auto-connect still honours an explicit open target", () => {
+  assert.equal(
+    resolveSftpAutoConnectPath({
+      explicitPath: "/tmp/upload",
+      followTerminalCwd: true,
+      terminalCwd: "/var/log",
+    }),
+    "/tmp/upload",
+  );
+});
+
+test("follow mode auto-connect without a known cwd skips the shared host cache", () => {
+  const resolvedPath = resolveSftpAutoConnectPath({
+    rememberedPath: "/home/deploy/projects/app",
+    followTerminalCwd: true,
+    terminalCwd: null,
+  });
+
+  assert.equal(resolvedPath, undefined);
+  assert.equal(
+    shouldIgnoreSftpSharedHostCacheOnAutoConnect({
+      followTerminalCwd: true,
+      resolvedPath,
+    }),
+    true,
+  );
+});
+
+test("follow off keeps the shared host cache and the sticky browsed path", () => {
+  const resolvedPath = resolveSftpAutoConnectPath({
+    rememberedPath: "/home/deploy/projects/app",
+    followTerminalCwd: false,
+    terminalCwd: "/var/log",
+  });
+
+  assert.equal(resolvedPath, "/home/deploy/projects/app");
+  assert.equal(
+    shouldIgnoreSftpSharedHostCacheOnAutoConnect({
+      followTerminalCwd: false,
+      resolvedPath: undefined,
+    }),
+    false,
   );
 });

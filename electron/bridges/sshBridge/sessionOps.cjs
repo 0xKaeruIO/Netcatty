@@ -303,6 +303,86 @@ function createSessionOpsApi(ctx) {
       }
     }
     
+    /**
+     * Late-bind this session's interactive shell PID when it shares an SSH
+     * transport with other terminals. Returns a PID only when it is the single
+     * unclaimed candidate for the single unidentified shell on the transport —
+     * never a guess.
+     */
+    async function claimSharedTransportShellPid(session, sessionId, timeoutMs) {
+      const transport = session.connRef;
+      if (!transport || !session.conn) return null;
+      // Reconnect ambiguity keeps its own fail-closed recovery path.
+      if (session.blockUntargetedCwdProbe) return null;
+      if (transport.closedShellPidUnknown) return null;
+      if (transport.shellPidClaimPromise) {
+        // Another terminal on this transport is already scanning. Let it settle
+        // and report ambiguity for now rather than opening a second exec.
+        await transport.shellPidClaimPromise.catch(() => {});
+        return null;
+      }
+
+      const listUntrackedShells = () => [...sessions.values()].filter((candidate) => (
+        candidate?.connRef === transport
+        && candidate?.stream
+        && !candidate.shellPid
+      ));
+      const untracked = listUntrackedShells();
+      if (untracked.length !== 1 || untracked[0] !== session) return null;
+
+      const owner = {
+        conn: session.conn,
+        connRef: transport,
+        stream: session.stream,
+      };
+      const isCurrentOwner = () => (
+        sessions.get(sessionId) === session
+        && session.conn === owner.conn
+        && session.connRef === owner.connRef
+        && session.stream === owner.stream
+      );
+
+      const claim = (async () => {
+        const discovery = await listInteractiveShellPids(session.conn, {
+          quoteShellArg,
+          openingTimeoutMs: timeoutMs,
+          runTimeoutMs: timeoutMs,
+          setTimeoutFn: setTimeout,
+          clearTimeoutFn: clearTimeout,
+          // A slow auxiliary exec must not invalidate the shared transport and
+          // tear down every terminal using it.
+          invalidateOnOpenTimeout: false,
+        });
+        if (!discovery.available || !isCurrentOwner()) return null;
+        if (transport.closedShellPidUnknown) return null;
+        const stillUntracked = listUntrackedShells();
+        if (stillUntracked.length !== 1 || stillUntracked[0] !== session) return null;
+
+        const claimedPids = new Set(
+          [...sessions.values()]
+            .filter((candidate) => (
+              candidate?.connRef === transport
+              && candidate !== session
+              && candidate.shellPid
+            ))
+            .map((candidate) => String(candidate.shellPid)),
+        );
+        if (transport.closedShellPids instanceof Set) {
+          for (const pid of transport.closedShellPids) claimedPids.add(String(pid));
+        }
+        const unclaimed = discovery.pids
+          .map(String)
+          .filter((pid) => !claimedPids.has(pid));
+        return unclaimed.length === 1 ? unclaimed[0] : null;
+      })().finally(() => {
+        if (transport.shellPidClaimPromise === claim) {
+          transport.shellPidClaimPromise = null;
+        }
+      });
+      transport.shellPidClaimPromise = claim;
+      return claim;
+    }
+
     async function getSessionPwd(event, payload) {
       const { sessionId } = payload;
       const isTargetedRecovery = payload?._cwdRecoveryToken === cwdRecoveryToken;
@@ -500,10 +580,31 @@ function createSessionOpsApi(ctx) {
         ).length
         : 1;
       if (sharedTerminalCount > 1 && !targetLoginPid) {
-        return {
-          success: false,
-          error: 'Current directory is ambiguous across shared terminal channels',
-        };
+        // Post-open discovery (startSession) normally binds the shell PID of
+        // every extra shell opened on a reused transport. When it comes back
+        // empty — bastion rate limits, a scan that ran before the new shell was
+        // visible, a host without a usable scan — the session stays anonymous
+        // and every later probe used to fail, permanently killing SFTP
+        // follow-terminal-cwd for the 2nd+ session on that host. Try once more
+        // here: the PID is safe to adopt only when this is the single
+        // unidentified shell on the transport and the scan leaves exactly one
+        // unclaimed candidate.
+        const claimedPid = await claimSharedTransportShellPid(session, sessionId, timeoutMs);
+        if (!claimedPid) {
+          return {
+            success: false,
+            error: 'Current directory is ambiguous across shared terminal channels',
+          };
+        }
+        const claimedResult = await getSessionPwd(event, {
+          ...payload,
+          _cwdRecoveryToken: cwdRecoveryToken,
+          _cwdRecoveryTargetPid: claimedPid,
+        });
+        if (claimedResult.success && sessions.get(sessionId) === session) {
+          session.shellPid = claimedPid;
+        }
+        return claimedResult;
       }
     
       // Completely silent: uses a separate exec channel, nothing is printed

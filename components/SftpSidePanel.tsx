@@ -40,7 +40,10 @@ import { useSftpBackend } from "../application/state/useSftpBackend";
 import { useSftpFileAssociations } from "../application/state/useSftpFileAssociations";
 import { getParentPath, isConcreteTransferTargetPath } from "../application/state/sftp/utils";
 import { buildCacheKey } from "../application/state/sftp/sharedRemoteHostCache";
-import { resolveSftpAutoConnectPath } from "../application/state/sftp/sftpReopenLocation";
+import {
+  resolveSftpAutoConnectPath,
+  shouldIgnoreSftpSharedHostCacheOnAutoConnect,
+} from "../application/state/sftp/sftpReopenLocation";
 import {
   isBrowseSessionInteractive,
   listRemoteBrowseConnectionIds,
@@ -549,6 +552,15 @@ const SftpSidePanelInner: React.FC<SftpSidePanelProps> = ({
     );
   }, [sftp.leftTabs.tabs, sftp.rightTabs.tabs]);
 
+  // Read through refs so a cwd tick or vault edit cannot re-identify
+  // runAutoConnect and re-enter the whole auto-connect decision tree.
+  const autoConnectFollowInputsRef = useRef({
+    hosts,
+    sftpFollowTerminalCwd,
+    activeTerminalCwd,
+  });
+  autoConnectFollowInputsRef.current = { hosts, sftpFollowTerminalCwd, activeTerminalCwd };
+
   const runAutoConnect = useCallback(() => {
     if (!activeHost) return;
 
@@ -829,10 +841,25 @@ const SftpSidePanelInner: React.FC<SftpSidePanelProps> = ({
       lastBrowsedPathByConnectionKeyRef.current,
       connectionKey,
     );
+    const followInputs = autoConnectFollowInputsRef.current;
+    // Read the follow flag from the latest vault entry: activeHost can be an
+    // open-time snapshot that predates the toolbar toggle.
+    const followTerminalCwd = resolveHostFollowTerminalCwd(
+      (
+        followInputs.hosts.find((host) => host.id === activeHost.id) ?? activeHost
+      ).sftpFollowTerminalCwd,
+      followInputs.sftpFollowTerminalCwd,
+    );
     const initialPath = resolveSftpAutoConnectPath({
       explicitPath:
         initialLocation?.hostId === activeHost.id ? initialLocation.path : null,
       rememberedPath,
+      followTerminalCwd,
+      terminalCwd: followInputs.activeTerminalCwd,
+    });
+    const ignoreSharedCache = shouldIgnoreSftpSharedHostCacheOnAutoConnect({
+      followTerminalCwd,
+      resolvedPath: initialPath,
     });
 
     connectedKeyRef.current = connectionKey;
@@ -847,6 +874,7 @@ const SftpSidePanelInner: React.FC<SftpSidePanelProps> = ({
       ...(connectRequestKey ? { connectRequestKey } : undefined),
       onConnectionCreated,
       ...(initialPath ? { initialPath } : undefined),
+      ...(ignoreSharedCache ? { ignoreSharedCache: true } : undefined),
       ...(needsNewTab ? { forceNewTab: true } : undefined),
       onTabCreated: (tabId) => {
         tabConnectionKeyMapRef.current.set(tabId, connectionKey);

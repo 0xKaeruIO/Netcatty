@@ -77,6 +77,75 @@ test("shared terminal cwd probe targets the shell pid assigned to that tab", asy
   assert.equal(session.shellPid, "4242");
 });
 
+function makeShellScanStream(pids) {
+  const stream = new EventEmitter();
+  stream.stderr = new EventEmitter();
+  stream.close = () => {};
+  setImmediate(() => {
+    stream.emit("data", Buffer.from(`${pids.join("\n")}\n__NETCATTY_SHELL_SCAN_COMPLETE__\n`));
+    stream.emit("close", 0);
+  });
+  return stream;
+}
+
+test("a shared terminal late-binds its shell pid when exactly one is unclaimed", async () => {
+  // Post-open discovery can come back empty (bastion rate limit, shell not yet
+  // visible), which used to leave every later probe ambiguous and kill SFTP
+  // follow for the 2nd+ session on that host.
+  let targetedCommand = "";
+  let scanCalls = 0;
+  const connRef = { count: 2 };
+  const session = {
+    connRef,
+    stream: {},
+    conn: {
+      exec(command, callback) {
+        if (command.includes("__NETCATTY_SHELL_SCAN_COMPLETE__")) {
+          scanCalls += 1;
+          callback(null, makeShellScanStream(["111", "222"]));
+          return;
+        }
+        targetedCommand = command;
+        callback(null, makePwdStream("/srv/second-tab", "222"));
+      },
+    },
+  };
+  const api = makeApi(session, [["session-2", { connRef, stream: {}, shellPid: "111" }]]);
+
+  const result = await api.getSessionPwd(null, { sessionId: "session-1" });
+
+  assert.deepEqual(result, { success: true, cwd: "/srv/second-tab" });
+  assert.match(targetedCommand, /TARGET_LOGIN=222/);
+  assert.equal(session.shellPid, "222");
+  assert.equal(scanCalls, 1);
+});
+
+test("a shared terminal stays fail closed when more than one shell pid is unclaimed", async () => {
+  let targetedCalls = 0;
+  const connRef = { count: 3 };
+  const session = {
+    connRef,
+    stream: {},
+    conn: {
+      exec(command, callback) {
+        if (command.includes("__NETCATTY_SHELL_SCAN_COMPLETE__")) {
+          callback(null, makeShellScanStream(["111", "222", "333"]));
+          return;
+        }
+        targetedCalls += 1;
+      },
+    },
+  };
+  const api = makeApi(session, [["session-2", { connRef, stream: {}, shellPid: "111" }]]);
+
+  const result = await api.getSessionPwd(null, { sessionId: "session-1" });
+
+  assert.equal(result.success, false);
+  assert.match(result.error, /ambiguous/);
+  assert.equal(targetedCalls, 0);
+  assert.equal(session.shellPid, undefined);
+});
+
 test("lsof cwd output decodes UTF-8 bytes and escaped control characters", () => {
   assert.equal(
     decodeLsofFileName("/tmp/\\xe4\\xb8\\xad\\xe6\\x96\\x87"),

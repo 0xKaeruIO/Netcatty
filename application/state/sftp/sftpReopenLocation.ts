@@ -52,15 +52,39 @@ export function resolveSftpOpenLocation(params: {
 /**
  * Path used when the side panel auto-connects / rebinds (not a user open).
  * Prefer an explicit open target, then the last browsed path for this endpoint.
- * Terminal cwd is intentionally omitted here so "follow off" stays sticky;
- * follow mode navigates after connect via the follow sync effect.
+ *
+ * With follow off, terminal cwd is intentionally omitted so the browsed
+ * directory stays sticky. With follow on the pane belongs to the linked
+ * terminal, so the live cwd wins over any remembered path: a second session on
+ * an already-browsed host must not open on the directory another pane left
+ * behind (the shared remote-host cache would otherwise supply it).
  */
 export function resolveSftpAutoConnectPath(params: {
   explicitPath?: string | null;
   rememberedPath?: string | null;
+  followTerminalCwd?: boolean;
+  terminalCwd?: string | null;
 }): string | undefined {
   const explicit = params.explicitPath?.length ? params.explicitPath : undefined;
   if (explicit) return explicit;
+  if (params.followTerminalCwd) {
+    return params.terminalCwd?.length ? params.terminalCwd : undefined;
+  }
   const remembered = params.rememberedPath?.length ? params.rememberedPath : undefined;
   return remembered;
+}
+
+/**
+ * Whether an auto-connect must skip the cross-pane shared remote-host cache.
+ *
+ * The cache is keyed by endpoint, not by pane, so adopting its path lands a
+ * fresh follow-mode pane on whatever directory another terminal tab was
+ * browsing. Skip it when follow is on and no concrete path is known yet; the
+ * follow sync then navigates once the terminal cwd resolves.
+ */
+export function shouldIgnoreSftpSharedHostCacheOnAutoConnect(params: {
+  followTerminalCwd?: boolean;
+  resolvedPath?: string | undefined;
+}): boolean {
+  return Boolean(params.followTerminalCwd) && !params.resolvedPath;
 }
